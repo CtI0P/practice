@@ -17,7 +17,7 @@
         <!-- 导航菜单 -->
         <div class="nav-menu">
             <div 
-                v-for="item in menuItems" 
+                v-for="item in navItems" 
                 :key="item.id"
                 class="nav-item" 
                 :class="{ active: activeItem === item.id }"
@@ -85,7 +85,6 @@
         },
         data() {
             return {
-                // 导航菜单项数据
                 // 导航菜单项数据
                 navItems: [
                     {
