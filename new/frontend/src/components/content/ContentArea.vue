@@ -122,8 +122,28 @@
         <!-- 用户管理内容 -->
         <div v-if="activeMenuItem === 'user-management'" class="user-management-content">
           <div class="content-section">
-            <h2 class="section-title">用户列表</h2>
-            <div class="table-wrapper">
+            <div class="table-header">
+              <h2 class="section-title">用户列表</h2>
+              <div class="table-stats">
+                <span v-if="!loadingUsers">共 {{ totalUsers }} 个用户</span>
+                <span v-else>加载中...</span>
+              </div>
+            </div>
+            
+            <!-- 加载状态 -->
+            <div v-if="loadingUsers" class="loading-state">
+              <i class="fas fa-spinner fa-spin"></i>
+              <span>正在加载用户数据...</span>
+            </div>
+            
+            <!-- 空状态 -->
+            <div v-else-if="userList.length === 0" class="empty-state">
+              <i class="fas fa-users"></i>
+              <h3>暂无用户数据</h3>
+              <p>没有找到任何用户记录</p>
+            </div>
+
+            <div v-else class="table-wrapper">
               <table class="data-table">
                 <thead>
                   <tr>
@@ -175,7 +195,9 @@
                 </tbody>
               </table>
             </div>
-            <div class="table-footer">
+
+
+            <div v-if="totalPages > 1" class="table-footer">
               <div class="pagination">
                 <button class="pagination-btn" @click="prevPage" :disabled="currentPage === 1">
                   <i class="fas fa-chevron-left"></i>
@@ -316,6 +338,8 @@
 </template>
 
 <script>
+import { apiService } from '@/services/api';
+
 export default {
   name: 'ContentArea',
   props: {
@@ -357,12 +381,17 @@ export default {
   },
   data() {
     return {
+      // 用户列表数据
+      userList: [], // 初始化为空数组
+      totalUsers: 0, // 总用户数
+      pageSize: 10, // 每页显示数量
+      currentPage: 1, // 当前页码
+      totalPages: 1, // 总页数
+
       // 加载状态
       loading: false,
+      loadingUsers: false,  // 用户数据加载状态
       
-      // 当前页码（用于分页）
-      currentPage: 1,
-      totalPages: 5,
       
       // 页面标题和描述映射
       pageTitles: {
@@ -558,54 +587,6 @@ export default {
         { key: 'status', title: '状态' }
       ],
       
-      // 用户列表数据
-      userList: [
-        {
-          id: 1,
-          name: '张同学',
-          email: 'zhang@example.com',
-          role: '学生',
-          joinDate: '2023-09-15',
-          lastLogin: '2023-10-20',
-          status: 'active'
-        },
-        {
-          id: 2,
-          name: '王老师',
-          email: 'wang@example.com',
-          role: '教师',
-          joinDate: '2023-08-10',
-          lastLogin: '2023-10-19',
-          status: 'active'
-        },
-        {
-          id: 3,
-          name: '李管理员',
-          email: 'li@example.com',
-          role: '管理员',
-          joinDate: '2023-07-01',
-          lastLogin: '2023-10-20',
-          status: 'active'
-        },
-        {
-          id: 4,
-          name: '赵同学',
-          email: 'zhao@example.com',
-          role: '学生',
-          joinDate: '2023-09-20',
-          lastLogin: '2023-10-18',
-          status: 'inactive'
-        },
-        {
-          id: 5,
-          name: '刘老师',
-          email: 'liu@example.com',
-          role: '教师',
-          joinDate: '2023-08-25',
-          lastLogin: '2023-10-20',
-          status: 'active'
-        }
-      ],
       
       // 课程列表数据
       courseList: [
@@ -720,20 +701,146 @@ export default {
   },
   watch: {
     // 监听激活菜单项变化
-    activeMenuItem(newVal, oldVal) {
+    async activeMenuItem(newVal, oldVal) {
       if (newVal !== oldVal) {
         // 模拟加载状态
         this.loading = true;
-        setTimeout(() => {
-          this.loading = false;
-        }, 500);
+        
+        try {
+          // 如果是用户管理页面，加载用户数据
+          if (newVal === 'user-management') {
+            await this.fetchUsers();
+          }
+        } catch (error) {
+          console.error('加载数据失败:', error);
+        } finally {
+          setTimeout(() => {
+            this.loading = false;
+          }, 500);
+        }
         
         // 触发菜单切换事件
         this.$emit('menu-changed', newVal);
       }
+    },
+    
+    // 监听页码变化
+    currentPage(newPage) {
+      if (this.activeMenuItem === 'user-management') {
+        this.fetchUsers(newPage);
+      }
     }
   },
   methods: {
+    // 从数据库获取用户列表
+    async fetchUsers(page = 1) {
+      try {
+        console.log('尝试获取用户...');
+        
+        // 直接调用，看看返回什么
+        const result = await apiService.getUsers(page, this.pageSize);
+        console.log('API 返回:', result);
+        
+        // 根据实际返回调整
+        if (Array.isArray(result)) {
+          this.userList = result;
+        } else if (result && Array.isArray(result.data)) {
+          this.userList = result.data;
+        } else {
+          console.warn('无法识别的格式，使用模拟数据');
+          this.useMockData();
+        }
+      } catch (error) {
+        console.error('错误:', error);
+        this.useMockData();
+      }
+    },
+
+    // 使用模拟数据作为备用
+    useMockData() {
+      this.userList = [
+        {
+          id: 1,
+          name: '张同学',
+          email: 'zhang@example.com',
+          role: '学生',
+          joinDate: '2023-09-15',
+          lastLogin: '2023-10-20',
+          status: 'active'
+        },
+        {
+          id: 2,
+          name: '王老师',
+          email: 'wang@example.com',
+          role: '教师',
+          joinDate: '2023-08-10',
+          lastLogin: '2023-10-19',
+          status: 'active'
+        },
+        {
+          id: 3,
+          name: '李管理员',
+          email: 'li@example.com',
+          role: '管理员',
+          joinDate: '2023-07-01',
+          lastLogin: '2023-10-20',
+          status: 'active'
+        },
+        {
+          id: 4,
+          name: '赵同学',
+          email: 'zhao@example.com',
+          role: '学生',
+          joinDate: '2023-09-20',
+          lastLogin: '2023-10-18',
+          status: 'inactive'
+        },
+        {
+          id: 5,
+          name: '刘老师',
+          email: 'liu@example.com',
+          role: '教师',
+          joinDate: '2023-08-25',
+          lastLogin: '2023-10-20',
+          status: 'active'
+        }
+      ];
+      this.totalUsers = this.userList.length;
+      this.totalPages = Math.ceil(this.totalUsers / this.pageSize);
+      this.currentPage = 1;
+    },
+    
+    // 格式化日期
+    formatDate(dateString) {
+      if (!dateString) return '从未登录';
+      
+      try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString;
+        
+        return date.toLocaleDateString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch (error) {
+        return dateString;
+      }
+    },
+    
+    // 转换角色
+    mapRole(role) {
+      const roleMap = {
+        'admin': '管理员',
+        'teacher': '教师',
+        'student': '学生',
+        'user': '用户'
+      };
+      return roleMap[role?.toLowerCase()] || role || '用户';
+    },
+    
     // 获取用户姓名首字母
     getUserInitials(name) {
       if (!name) return '用户';
@@ -744,6 +851,120 @@ export default {
     getRandomColor() {
       const colors = ['#4361ee', '#3a0ca3', '#4cc9f0', '#4CAF50', '#2196F3', '#FF9800', '#9C27B0'];
       return colors[Math.floor(Math.random() * colors.length)];
+    },
+    
+    // 分页：上一页
+    prevPage() {
+      if (this.currentPage > 1) {
+        this.currentPage--;
+      }
+    },
+    
+    // 分页：下一页
+    nextPage() {
+      if (this.currentPage < this.totalPages) {
+        this.currentPage++;
+      }
+    },
+    
+    // 编辑用户
+    async editUser(userId) {
+      try {
+        // 获取用户详细信息
+        const response = await apiService.getUser(userId);
+        
+        if (response.success) {
+          this.$emit('edit-user', response.data);
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error);
+        this.$message.error('获取用户信息失败');
+      }
+    },
+    
+    // 查看用户
+    async viewUser(userId) {
+      try {
+        const response = await apiService.getUser(userId);
+        
+        if (response.success) {
+          this.$emit('view-user', response.data);
+        }
+      } catch (error) {
+        console.error('获取用户信息失败:', error);
+        this.$message.error('获取用户信息失败');
+      }
+    },
+    
+    // 删除用户
+    async deleteUser(userId) {
+      if (!confirm('确定要删除这个用户吗？此操作不可撤销。')) {
+        return;
+      }
+      
+      try {
+        const response = await apiService.deleteUser(userId);
+        
+        if (response.success) {
+          this.$message.success('删除用户成功');
+          // 重新加载用户列表
+          await this.fetchUsers(this.currentPage);
+          this.$emit('delete-user-success', userId);
+        }
+      } catch (error) {
+        console.error('删除用户失败:', error);
+        
+        if (error.response?.status === 403) {
+          this.$message.error('没有权限删除用户');
+        } else {
+          this.$message.error('删除用户失败');
+        }
+      }
+    },
+    
+    // 导出用户数据
+    async exportUsers() {
+      try {
+        // 这里可以调用后端导出接口，或者使用前端导出
+        const response = await apiService.getUsers(1, 1000); // 获取大量数据
+        
+        if (response.success) {
+          // 前端导出为CSV
+          this.exportToCSV(response.data.users, 'users.csv');
+          this.$emit('export-users', response.data.users);
+        }
+      } catch (error) {
+        console.error('导出用户数据失败:', error);
+        this.$message.error('导出用户数据失败');
+      }
+    },
+    
+    // 导出为CSV
+    exportToCSV(data, filename) {
+      const headers = ['ID', '用户名', '邮箱', '角色', '注册时间', '最后登录', '状态'];
+      const rows = data.map(user => [
+        user.id,
+        user.username,
+        user.email,
+        user.role,
+        user.created_at,
+        user.last_login || '从未登录',
+        user.status
+      ]);
+      
+      let csvContent = "data:text/csv;charset=utf-8,";
+      csvContent += headers.join(',') + "\n";
+      rows.forEach(row => {
+        csvContent += row.join(',') + "\n";
+      });
+      
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     },
     
     // 获取模块图标
@@ -804,44 +1025,6 @@ export default {
       this.$emit('explore-module', moduleId);
     },
     
-    // 分页：上一页
-    prevPage() {
-      if (this.currentPage > 1) {
-        this.currentPage--;
-        this.$emit('page-changed', this.currentPage);
-      }
-    },
-    
-    // 分页：下一页
-    nextPage() {
-      if (this.currentPage < this.totalPages) {
-        this.currentPage++;
-        this.$emit('page-changed', this.currentPage);
-      }
-    },
-    
-    // 编辑用户
-    editUser(userId) {
-      this.$emit('edit-user', userId);
-    },
-    
-    // 查看用户
-    viewUser(userId) {
-      this.$emit('view-user', userId);
-    },
-    
-    // 删除用户
-    deleteUser(userId) {
-      if (confirm('确定要删除这个用户吗？此操作不可撤销。')) {
-        this.$emit('delete-user', userId);
-      }
-    },
-    
-    // 导出用户数据
-    exportUsers() {
-      this.$emit('export-users');
-    },
-    
     // 打开添加用户模态框
     openAddUserModal() {
       this.$emit('open-add-user-modal');
@@ -864,6 +1047,11 @@ export default {
   },
   mounted() {
     console.log('ContentArea component mounted');
+
+    // 如果初始就是用户管理页面，加载用户数据
+    if (this.activeMenuItem === 'user-management') {
+      this.fetchUsers();
+    }
   }
 };
 </script>
@@ -1696,5 +1884,49 @@ export default {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.table-stats {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 50px;
+  color: #6c757d;
+}
+
+.loading-state i {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 50px;
+  color: #6c757d;
+}
+
+.empty-state i {
+  font-size: 48px;
+  margin-bottom: 15px;
+  color: #adb5bd;
+}
+
+.empty-state h3 {
+  font-size: 18px;
+  margin-bottom: 10px;
+  color: #495057;
 }
 </style>

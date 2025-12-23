@@ -12,7 +12,11 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   config => {
-    // 可以在这里添加token等
+    // 从localStorage获取token
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   error => {
@@ -27,16 +31,25 @@ api.interceptors.response.use(
   },
   error => {
     console.error('API Error:', error.response || error.message);
+    
+    // 处理认证错误
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    
     return Promise.reject(error);
   }
 );
 
 // API方法
 export const apiService = {
-
   // 用户注册
   async registerUser(data) {
-    return api.post('/register', data);
+    return api.post('/submit', data); // 注意：后端注册接口是 /submit
   },
 
   // 用户登录
@@ -44,19 +57,26 @@ export const apiService = {
     return api.post('/login', data);
   },
   
-  // 获取所有用户
-  async getUsers() {
-    return api.get('/submissions');
+  // 获取所有用户（带分页）
+  async getUsers(page = 1, limit = 10) {
+    return api.get('/users', {
+      params: { page, limit }
+    });
   },
   
   // 获取单个用户
   async getUser(id) {
-    return api.get(`/submissions/${id}`);
+    return api.get(`/users/${id}`);
+  },
+  
+  // 更新用户信息
+  async updateUser(id, data) {
+    return api.put(`/users/${id}`, data);
   },
   
   // 删除用户
   async deleteUser(id) {
-    return api.delete(`/submissions/${id}`);
+    return api.delete(`/users/${id}`);
   },
 
   // 提交表单数据
@@ -72,7 +92,18 @@ export const apiService = {
   // 获取单个提交
   async getSubmission(id) {
     return api.get(`/submissions/${id}`);
+  },
+  
+  // 获取当前登录用户信息
+  async getCurrentUser() {
+    return api.get('/user/profile');
+  },
+  
+  // 注销登录
+  async logout() {
+    return api.post('/logout');
   }
 };
+
 
 export default apiService;

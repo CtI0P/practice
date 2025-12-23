@@ -2,16 +2,38 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
 
-// 获取所有用户（修正字段名）
+// 获取所有用户（带分页）
 router.get('/users', async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    // 获取总数
+    const [totalRows] = await pool.execute('SELECT COUNT(*) as count FROM users');
+    const total = totalRows[0].count;
+
+    // 获取分页数据
     const [rows] = await pool.execute(
-      'SELECT id, username, email, full_name, role, avatar_url, created_at FROM users ORDER BY created_at DESC'
+      `SELECT id, username, email, full_name, role, avatar_url, 
+       created_at, last_login, status 
+       FROM users 
+       ORDER BY created_at DESC 
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
     );
 
     return res.json({
       success: true,
-      data: rows,
+      data: {
+        users: rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      },
       message: '获取用户列表成功'
     });
   } catch (error) {
@@ -110,7 +132,9 @@ router.post('/submit', async (req, res) => {
 router.get('/users/:id', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, username, email, full_name, role, avatar_url, created_at FROM users WHERE id = ?',
+      `SELECT id, username, email, full_name, role, avatar_url, 
+       created_at, last_login, status 
+       FROM users WHERE id = ?`,
       [req.params.id]
     );
     
@@ -134,13 +158,12 @@ router.get('/users/:id', async (req, res) => {
   }
 });
 
-// 用户登录（修正密码字段）
+// 用户登录
 router.post('/login', async (req, res) => {
   try {
     console.log('收到登录请求:', req.body);
     const { usernameOrEmail, password } = req.body;
 
-    // 验证
     if (!usernameOrEmail || !password) {
       return res.status(400).json({
         success: false,
@@ -162,15 +185,21 @@ router.post('/login', async (req, res) => {
     }
 
     const user = users[0];
-    console.log('找到用户:', user.username);
 
-    // 修正：比较 password_hash 字段
+    // 修正：应该使用 bcrypt 比较密码
+    // 暂时先用明文比较（实际项目一定要加密）
     if (user.password_hash !== password) {
       return res.status(401).json({
         success: false,
         message: '密码错误'
       });
     }
+
+    // 更新最后登录时间
+    await pool.execute(
+      'UPDATE users SET last_login = NOW() WHERE id = ?',
+      [user.id]
+    );
 
     // 生成 token
     const token = `token_${user.id}_${Date.now()}`;
@@ -196,8 +225,8 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// 删除用户
-router.delete('/submissions/:id', async (req, res) => {
+// 删除用户（修正路径）
+router.delete('/users/:id', async (req, res) => {
   try {
     const [result] = await pool.execute(
       'DELETE FROM users WHERE id = ?',
@@ -224,10 +253,10 @@ router.delete('/submissions/:id', async (req, res) => {
   }
 });
 
-// 更新用户信息
-router.put('/submissions/:id', async (req, res) => {
+// 更新用户信息（修正路径）
+router.put('/users/:id', async (req, res) => {
   try {
-    const { username, email, full_name, role } = req.body;
+    const { username, email, full_name, role, status } = req.body;
     
     // 验证必要字段
     if (!username || !email) {
@@ -238,8 +267,8 @@ router.put('/submissions/:id', async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      'UPDATE users SET username = ?, email = ?, full_name = ?, role = ? WHERE id = ?',
-      [username, email, full_name, role, req.params.id]
+      'UPDATE users SET username = ?, email = ?, full_name = ?, role = ?, status = ? WHERE id = ?',
+      [username, email, full_name, role, status || 'active', req.params.id]
     );
     
     if (result.affectedRows === 0) {
@@ -250,7 +279,9 @@ router.put('/submissions/:id', async (req, res) => {
     }
     
     const [updatedUser] = await pool.execute(
-      'SELECT id, username, email, full_name, role, avatar_url, created_at FROM users WHERE id = ?',
+      `SELECT id, username, email, full_name, role, avatar_url, 
+       created_at, last_login, status 
+       FROM users WHERE id = ?`,
       [req.params.id]
     );
     
