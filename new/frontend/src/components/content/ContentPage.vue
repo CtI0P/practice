@@ -18,6 +18,7 @@
         :active-menu-item="activeMenuItem"
         :sidebar-collapsed="sidebarCollapsed"
         :show-right-sidebar="showRightSidebar"
+        @update:activeMenuItem="activeMenuItem = $event"
         @card-clicked="handleCardClick"
         @page-action="handlePageAction"
       />
