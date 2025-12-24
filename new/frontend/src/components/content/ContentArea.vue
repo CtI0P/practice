@@ -87,12 +87,19 @@
         /> -->
 
         <GenericContent 
-          v-if="['video-playback', 'online-testing', 'data-analysis'].includes(activeMenuItem)"
+          v-if="['video-playback', 'data-analysis'].includes(activeMenuItem)"
           :module-id="activeMenuItem"
           @explore-module="exploreModule"
         />
         <CommunityInteraction 
           v-if="activeMenuItem === 'community-interaction'"
+          @explore-module="exploreModule"
+        />
+
+        <OnlineTesting 
+          v-if="activeMenuItem === 'online-testing'"
+          @start-test="startOnlineTest"
+          @view-results="viewTestResults"
           @explore-module="exploreModule"
         />
         
@@ -122,6 +129,7 @@ import CourseManagementContent from './dif/CourseManagementContent.vue';
 import GenericContent from './dif/GenericContent.vue';
 import RightSidebar from './dif/RightSidebar.vue';
 import CommunityInteraction from './small/CommunityInteraction.vue';
+import OnlineTesting from './small/OnlineTesting.vue';
 
 export default {
   name: 'ContentArea',
@@ -133,7 +141,8 @@ export default {
     CourseManagementContent,
     GenericContent,
     RightSidebar,
-    CommunityInteraction
+    CommunityInteraction,
+    OnlineTesting,
   },
   props: {
     activeMenuItem: { type: String, default: 'dashboard' },
@@ -231,7 +240,10 @@ export default {
         'dashboard': [{ id: 'refresh', label: '刷新', icon: 'fas fa-sync-alt', type: 'default', tooltip: '刷新数据' }, { id: 'export', label: '导出数据', icon: 'fas fa-download', type: 'default', tooltip: '导出当前数据' }],
         'user-management': [{ id: 'add-user', label: '添加用户', icon: 'fas fa-user-plus', type: 'primary', tooltip: '添加新用户' }, { id: 'import-users', label: '批量导入', icon: 'fas fa-upload', type: 'default', tooltip: '批量导入用户' }, { id: 'export-users', label: '导出用户', icon: 'fas fa-download', type: 'default', tooltip: '导出用户列表' }],
         'course-management': [{ id: 'add-course', label: '创建课程', icon: 'fas fa-plus', type: 'primary', tooltip: '创建新课程' }, { id: 'manage-categories', label: '分类管理', icon: 'fas fa-tags', type: 'default', tooltip: '管理课程分类' }, { id: 'course-analytics', label: '课程分析', icon: 'fas fa-chart-line', type: 'default', tooltip: '查看课程分析' }]
-      }
+      },
+
+      testMode: null, 
+      currentTestId: null
     };
   },
   computed: {
@@ -249,7 +261,7 @@ export default {
     },
     showStatsCards() {
       return this.activeMenuItem === 'dashboard';
-    }
+    },
   },
   watch: {
     async activeMenuItem(newVal, oldVal) {
@@ -515,6 +527,40 @@ export default {
     },
     openAddUserModal() {
       this.$emit('open-add-user-modal');
+    },
+    // 开始在线测试
+    startOnlineTest(testId) {
+      this.currentTestId = testId;
+      this.testMode = 'taking';
+    },
+
+    // 查看测试结果
+    viewTestResults(testId) {
+      this.currentTestId = testId;
+      this.testMode = 'results';
+    },
+
+    // 测试提交后返回列表
+    handleTestSubmitted(result) {
+      this.testMode = 'list';
+      this.$message?.success('测试提交成功！您的得分：' + result.score);
+    },
+
+    // 返回测试列表
+    backToTestList() {
+      this.testMode = 'list';
+      this.currentTestId = null;
+    },
+
+    handleStartTest(testId) {
+      console.log('开始测试:', testId);
+      // 这里可以跳转到测试页面或显示测试组件
+      this.$emit('start-test', testId);
+    },
+    
+    handleViewResults(testId) {
+      console.log('查看测试结果:', testId);
+      this.$emit('view-results', testId);
     }
   },
   mounted() {
