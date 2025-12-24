@@ -102,8 +102,38 @@ export const apiService = {
   // 注销登录
   async logout() {
     return api.post('/logout');
+  },
+
+  // ====================== 课程相关（修正变量名+统一风格） ======================
+  // 获取课程列表
+  async getCourses() {
+    return api.get('/courses');
+  },
+  
+  // 获取单个课程详情
+  async getCourseDetail(courseId) {
+    return api.get(`/courses/${courseId}`);
+  },
+  
+  // 新增课程
+  async addCourse(courseData) {
+    return api.post('/courses', courseData);
+  },
+  
+  // 编辑课程
+  async updateCourse(courseId, courseData) {
+    return api.put(`/courses/${courseId}`, courseData);
+  },
+  
+  // 删除课程
+  async deleteCourse(courseId) {
+    return api.delete(`/courses/${courseId}`);
+  },
+  
+  // 获取课程下的课时列表
+  async getCourseLessons(courseId) {
+    return api.get(`/courses/${courseId}/lessons`);
   }
 };
-
 
 export default apiService;

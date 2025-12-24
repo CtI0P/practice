@@ -66,7 +66,7 @@
           @open-add-user-modal="openAddUserModal"
         />
         
-        <!-- 课程管理内容 -->
+        <!-- 课程管理内容（添加loading状态） -->
         <CourseManagementContent 
           v-if="activeMenuItem === 'course-management'"
           :course-list="courseList"
@@ -74,6 +74,10 @@
           @view-course="viewCourse"
           @manage-content="manageCourseContent"
         />
+        <!-- 课程加载中占位 -->
+        <div v-if="loadingCourses && activeMenuItem === 'course-management'" class="loading-placeholder">
+          <p>正在加载课程数据...</p>
+        </div>
         
         <!-- 通用内容容器 -->
         <GenericContent 
@@ -137,6 +141,10 @@ export default {
       currentPage: 1,
       totalPages: 1,
 
+      // 课程列表数据（删除重复定义，仅保留一个）
+      courseList: [],
+      loadingCourses: false,
+
       // 加载状态
       loading: false,
       loadingUsers: false,
@@ -197,14 +205,6 @@ export default {
         { key: 'status', title: '状态' }
       ],
       
-      // 课程列表数据
-      courseList: [
-        { id: 1, title: 'Python编程入门', description: '本课程适合编程初学者，涵盖Python基础语法、数据结构、函数、面向对象编程等内容。', category: '编程开发', level: '初级', students: 1250, duration: '24小时', progress: 78, image: 'https://via.placeholder.com/300x150/2196F3/FFFFFF?text=Python+课程' },
-        { id: 2, title: '数据分析实战', description: '学习使用Python进行数据清洗、分析和可视化，掌握常用数据分析工具和技术。', category: '数据科学', level: '中级', students: 842, duration: '32小时', progress: 45, image: 'https://via.placeholder.com/300x150/4CAF50/FFFFFF?text=数据分析' },
-        { id: 3, title: 'Web开发全栈', description: '从前端到后端，全面学习现代Web开发技术，包括HTML/CSS/JavaScript和Node.js。', category: '前端开发', level: '中级', students: 956, duration: '40小时', progress: 92, image: 'https://via.placeholder.com/300x150/FF9800/FFFFFF?text=Web开发' },
-        { id: 4, title: '机器学习基础', description: '介绍机器学习基本概念和算法，包括监督学习、无监督学习和深度学习基础。', category: '人工智能', level: '高级', students: 523, duration: '36小时', progress: 30, image: 'https://via.placeholder.com/300x150/9C27B0/FFFFFF?text=机器学习' }
-      ],
-      
       // 快速链接
       quickLinks: [
         { id: 'new-course', label: '创建新课程', icon: 'fas fa-plus-circle' },
@@ -244,8 +244,11 @@ export default {
       if (newVal !== oldVal) {
         this.loading = true;
         try {
+          // 切换菜单时加载对应数据
           if (newVal === 'user-management') {
             await this.fetchUsers();
+          } else if (newVal === 'course-management') {
+            await this.fetchCourses();
           }
         } catch (error) {
           console.error('加载数据失败:', error);
@@ -264,55 +267,55 @@ export default {
     }
   },
   methods: {
-    // 获取用户列表
+    // ====================== 用户管理相关方法 ======================
     async fetchUsers(page = 1) {
-  this.loadingUsers = true;
-  try {
-    const result = await apiService.getUsers(page, this.pageSize);
-    console.log("接口返回结果:", result);
+      this.loadingUsers = true;
+      try {
+        const result = await apiService.getUsers(page, this.pageSize);
+        console.log("用户接口返回结果:", result);
 
-    // 适配接口返回结构：result是对象，包含success、data、message
-    if (result.success && result.data && Array.isArray(result.data.userList)) {
-      // 字段映射：把后端返回的字段转成前端组件需要的格式
-      this.userList = result.data.userList.map(user => ({
-        id: user.id,
-        name: user.username, // 后端返回的是username，前端组件需要name
-        email: user.email,
-        full_name: user.full_name || '未设置',
-        role: user.role, // 后端返回的是student/instructor/admin，直接复用
-        // 时间格式化
-        joinDate: user.created_at ? new Date(user.created_at).toLocaleDateString('zh-CN') : '未知',
-        lastLogin: user.updated_at ? new Date(user.updated_at).toLocaleString('zh-CN') : '从未登录',
-        // 状态转换：后端is_active是布尔值，转成active/inactive
-        status: user.is_active ? 'active' : 'inactive'
-      }));
-      
-      // 同步后端返回的分页数据
-      this.totalUsers = result.data.totalUsers;
-      this.currentPage = result.data.currentPage;
-      this.totalPages = result.data.totalPages;
-    } else {
-      // 接口返回异常，使用模拟数据
-      this.useMockData();
-      this.$message.warning("接口数据异常，使用模拟数据");
-    }
-  } catch (error) {
-    console.error('获取用户失败:', error);
-    this.useMockData();
-    this.$message.error(error.message || '获取用户列表失败');
-  } finally {
-    this.loadingUsers = false;
-  }
-},
+        // 适配接口返回结构：result是对象，包含success、data、message
+        if (result.success && result.data && Array.isArray(result.data.userList)) {
+          // 字段映射：把后端返回的字段转成前端组件需要的格式
+          this.userList = result.data.userList.map(user => ({
+            id: user.id,
+            name: user.username, // 后端返回的是username，前端组件需要name
+            email: user.email,
+            full_name: user.full_name || '未设置',
+            role: user.role, // 后端返回的是student/instructor/admin，直接复用
+            // 时间格式化
+            joinDate: user.created_at ? new Date(user.created_at).toLocaleDateString('zh-CN') : '未知',
+            lastLogin: user.updated_at ? new Date(user.updated_at).toLocaleString('zh-CN') : '从未登录',
+            // 状态转换：后端is_active是布尔值，转成active/inactive
+            status: user.is_active ? 'active' : 'inactive'
+          }));
+          
+          // 同步后端返回的分页数据
+          this.totalUsers = result.data.totalUsers;
+          this.currentPage = result.data.currentPage;
+          this.totalPages = result.data.totalPages;
+        } else {
+          // 接口返回异常，使用模拟数据
+          this.useMockData();
+          this.$message?.warning("接口数据异常，使用模拟数据");
+        }
+      } catch (error) {
+        console.error('获取用户失败:', error);
+        this.useMockData();
+        this.$message?.error(error.message || '获取用户列表失败');
+      } finally {
+        this.loadingUsers = false;
+      }
+    },
     
     // 模拟用户数据
     useMockData() {
       this.userList = [
-        { id: 1, name: '张同学', email: 'zhang@example.com', role: '学生', joinDate: '2023-09-15', lastLogin: '2023-10-20', status: 'active' },
-        { id: 2, name: '王老师', email: 'wang@example.com', role: '教师', joinDate: '2023-08-10', lastLogin: '2023-10-19', status: 'active' },
-        { id: 3, name: '李管理员', email: 'li@example.com', role: '管理员', joinDate: '2023-07-01', lastLogin: '2023-10-20', status: 'active' },
-        { id: 4, name: '赵同学', email: 'zhao@example.com', role: '学生', joinDate: '2023-09-20', lastLogin: '2023-10-18', status: 'inactive' },
-        { id: 5, name: '刘老师', email: 'liu@example.com', role: '教师', joinDate: '2023-08-25', lastLogin: '2023-10-20', status: 'active' }
+        { id: 1, name: '张同学', email: 'zhang@example.com', role: 'student', joinDate: '2023-09-15', lastLogin: '2023-10-20', status: 'active' },
+        { id: 2, name: '王老师', email: 'wang@example.com', role: 'instructor', joinDate: '2023-08-10', lastLogin: '2023-10-19', status: 'active' },
+        { id: 3, name: '李管理员', email: 'li@example.com', role: 'admin', joinDate: '2023-07-01', lastLogin: '2023-10-20', status: 'active' },
+        { id: 4, name: '赵同学', email: 'zhao@example.com', role: 'student', joinDate: '2023-09-20', lastLogin: '2023-10-18', status: 'inactive' },
+        { id: 5, name: '刘老师', email: 'liu@example.com', role: 'instructor', joinDate: '2023-08-25', lastLogin: '2023-10-20', status: 'active' }
       ];
       this.totalUsers = this.userList.length;
       this.totalPages = Math.ceil(this.totalUsers / this.pageSize);
@@ -326,70 +329,159 @@ export default {
       if (this.currentPage < this.totalPages) this.currentPage++;
     },
     
-    // 用户操作
+    // 编辑用户
     async editUser(userId) {
       try {
         const res = await apiService.getUser(userId);
         if (res.success) this.$emit('edit-user', res.data);
       } catch (err) {
         console.error(err);
-        this.$message.error('获取用户信息失败');
+        this.$message?.error('获取用户信息失败');
       }
     },
+    
+    // 查看用户
     async viewUser(userId) {
       try {
         const res = await apiService.getUser(userId);
         if (res.success) this.$emit('view-user', res.data);
       } catch (err) {
         console.error(err);
-        this.$message.error('获取用户信息失败');
+        this.$message?.error('获取用户信息失败');
       }
     },
+    
+    // 删除用户
     async deleteUser(userId) {
       if (!confirm('确定删除？')) return;
       try {
         const res = await apiService.deleteUser(userId);
         if (res.success) {
-          this.$message.success('删除成功');
+          this.$message?.success('删除成功');
           await this.fetchUsers(this.currentPage);
           this.$emit('delete-user-success', userId);
         }
       } catch (err) {
         console.error(err);
-        this.$message.error('删除失败');
+        this.$message?.error('删除失败');
       }
     },
+    
+    // 导出用户CSV
     async exportUsers() {
       try {
+        this.loading = true;
         const res = await apiService.getUsers(1, 1000);
         if (res.success) {
-          this.exportToCSV(res.data.users, 'users.csv');
-          this.$emit('export-users', res.data.users);
+          // 适配后端返回的字段格式
+          const headers = ['ID', '用户名', '邮箱', '角色', '注册时间', '最后登录', '状态'];
+          const rows = res.data.userList.map(user => [
+            user.id, 
+            user.username, 
+            user.email, 
+            // 角色中文映射
+            user.role === 'student' ? '学生' : user.role === 'instructor' ? '教师' : '管理员',
+            user.created_at ? new Date(user.created_at).toLocaleDateString('zh-CN') : '未知', 
+            user.updated_at ? new Date(user.updated_at).toLocaleString('zh-CN') : '从未登录', 
+            user.is_active ? '活跃' : '禁用'
+          ]);
+          
+          // 解决中文乱码
+          const bom = '\uFEFF';
+          const csvContent = `${bom}${headers.join(',')}\n${rows.map(row => row.join(',')).join('\n')}`;
+          const link = document.createElement('a');
+          link.href = encodeURI(csvContent);
+          link.download = '用户列表.csv';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          this.$emit('export-users', res.data.userList);
+          this.$message?.success('导出成功');
         }
       } catch (err) {
         console.error(err);
-        this.$message.error('导出失败');
+        this.$message?.error('导出失败');
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    // ====================== 课程管理相关方法 ======================
+    // 获取课程列表
+    async fetchCourses() {
+      this.loadingCourses = true;
+      try {
+        const result = await apiService.getCourses();
+        console.log("课程接口返回结果:", result);
+        
+        // 适配后端返回结构
+        if (result.success && result.data && Array.isArray(result.data.courseList)) {
+          this.courseList = result.data.courseList;
+        } else {
+          // 接口异常时使用模拟数据
+          this.useCourseMockData();
+          this.$message?.warning("课程接口数据异常，使用模拟数据");
+        }
+      } catch (error) {
+        console.error('获取课程失败:', error);
+        this.useCourseMockData();
+        this.$message?.error(error.message || '获取课程列表失败');
+      } finally {
+        this.loadingCourses = false;
       }
     },
     
-    // 导出CSV
-    exportToCSV(data, filename) {
-      const headers = ['ID', '用户名', '邮箱', '角色', '注册时间', '最后登录', '状态'];
-      const rows = data.map(user => [
-        user.id, user.username, user.email, user.role,
-        user.created_at, user.last_login || '从未登录', user.status
-      ]);
-      
-      const csvContent = `data:text/csv;charset=utf-8,${headers.join(',')}\n${rows.map(row => row.join(',')).join('\n')}`;
-      const link = document.createElement('a');
-      link.href = encodeURI(csvContent);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    // 课程模拟数据（兜底用）
+    useCourseMockData() {
+      this.courseList = [
+        { id: 1, title: 'Python编程入门', description: '本课程适合编程初学者，涵盖Python基础语法、数据结构、函数、面向对象编程等内容。', category: '编程开发', level: '初级', students: 1250, duration: '24小时', progress: 78, image: 'https://via.placeholder.com/300x150/2196F3/FFFFFF?text=Python+课程' },
+        { id: 2, title: '数据分析实战', description: '学习使用Python进行数据清洗、分析和可视化，掌握常用数据分析工具和技术。', category: '数据科学', level: '中级', students: 842, duration: '32小时', progress: 45, image: 'https://via.placeholder.com/300x150/4CAF50/FFFFFF?text=数据分析' },
+        { id: 3, title: 'Web开发全栈', description: '从前端到后端，全面学习现代Web开发技术，包括HTML/CSS/JavaScript和Node.js。', category: '前端开发', level: '中级', students: 956, duration: '40小时', progress: 92, image: 'https://via.placeholder.com/300x150/FF9800/FFFFFF?text=Web开发' },
+        { id: 4, title: '机器学习基础', description: '介绍机器学习基本概念和算法，包括监督学习、无监督学习和深度学习基础。', category: '人工智能', level: '高级', students: 523, duration: '36小时', progress: 30, image: 'https://via.placeholder.com/300x150/9C27B0/FFFFFF?text=机器学习' }
+      ];
     },
     
-    // 事件转发
+    // 编辑课程
+    async editCourse(courseId) {
+      try {
+        const res = await apiService.getCourseDetail(courseId);
+        if (res.success) {
+          this.$emit('edit-course', res.data.course);
+        }
+      } catch (err) {
+        console.error(err);
+        this.$message?.error('获取课程信息失败');
+      }
+    },
+    
+    // 查看课程
+    async viewCourse(courseId) {
+      try {
+        const res = await apiService.getCourseDetail(courseId);
+        if (res.success) {
+          this.$emit('view-course', res.data.course);
+        }
+      } catch (err) {
+        console.error(err);
+        this.$message?.error('获取课程信息失败');
+      }
+    },
+    
+    // 管理课程内容（课时）
+    async manageCourseContent(courseId) {
+      try {
+        const res = await apiService.getCourseLessons(courseId);
+        if (res.success) {
+          this.$emit('manage-content', { courseId, lessons: res.data.lessons });
+        }
+      } catch (err) {
+        console.error(err);
+        this.$message?.error('获取课程课时失败');
+      }
+    },
+
+    // ====================== 通用事件转发方法 ======================
     navigateToCard(cardId) {
       this.$emit('card-clicked', cardId);
     },
@@ -398,6 +490,10 @@ export default {
     },
     handlePageAction(actionId) {
       this.$emit('page-action', actionId);
+      // 课程管理页面的"创建课程"按钮触发
+      if (actionId === 'add-course') {
+        this.$emit('open-add-course-modal');
+      }
     },
     navigateToQuickLink(linkId) {
       this.$emit('quick-link-clicked', linkId);
@@ -407,20 +503,14 @@ export default {
     },
     openAddUserModal() {
       this.$emit('open-add-user-modal');
-    },
-    editCourse(courseId) {
-      this.$emit('edit-course', courseId);
-    },
-    viewCourse(courseId) {
-      this.$emit('view-course', courseId);
-    },
-    manageCourseContent(courseId) {
-      this.$emit('manage-course-content', courseId);
     }
   },
   mounted() {
+    // 初始加载对应菜单的数据
     if (this.activeMenuItem === 'user-management') {
       this.fetchUsers();
+    } else if (this.activeMenuItem === 'course-management') {
+      this.fetchCourses();
     }
   }
 };
@@ -512,6 +602,16 @@ export default {
 
 .content-wrapper {
   flex: 1;
+}
+
+/* 课程加载占位 */
+.loading-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #6c757d;
+  font-size: 16px;
 }
 
 .router-view-wrapper {
