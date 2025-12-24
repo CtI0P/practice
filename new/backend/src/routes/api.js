@@ -623,4 +623,163 @@ router.get('/courses/:id/lessons', async (req, res) => {
   }
 });
 
+// 获取帖子列表（包含评论）
+router.get('/posts', async (req, res) => {
+  try {
+    // 获取所有帖子，关联users表获取作者名
+    const [posts] = await pool.execute(`
+      SELECT 
+        p.id,
+        p.content,
+        p.created_at,
+        u.username as author_name,
+        u.full_name,
+        u.avatar_url
+      FROM posts p
+      LEFT JOIN users u ON p.user_id = u.id
+      ORDER BY p.created_at DESC
+    `);
+
+    // 为每个帖子获取评论（同样关联users表）
+    const postsWithComments = await Promise.all(
+      posts.map(async (post) => {
+        const [comments] = await pool.execute(`
+          SELECT 
+            c.id,
+            c.content,
+            c.created_at,
+            u.username as author_name,
+            u.full_name,
+            u.avatar_url
+          FROM comments c
+          LEFT JOIN users u ON c.user_id = u.id
+          WHERE c.post_id = ?
+          ORDER BY c.created_at ASC
+        `, [post.id]);
+
+        return {
+          ...post,
+          comments: comments || []
+        };
+      })
+    );
+
+    return res.json({
+      success: true,
+      data: postsWithComments,
+      message: '获取帖子列表成功'
+    });
+  } catch (error) {
+    console.error('获取帖子列表失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '获取帖子列表失败'
+    });
+  }
+});
+
+// 创建新帖子
+router.post('/posts', async (req, res) => {
+  try {
+    const { user_id, content } = req.body;
+
+    if (!user_id || !content) {
+      return res.status(400).json({
+        success: false,
+        message: '用户ID和内容不能为空'
+      });
+    }
+
+    const [result] = await pool.execute(
+      'INSERT INTO posts (user_id, content) VALUES (?, ?)',
+      [user_id, content]
+    );
+
+    // 获取新创建的帖子（关联users表获取作者信息）
+    const [newPost] = await pool.execute(`
+      SELECT 
+        p.id,
+        p.content,
+        p.created_at,
+        u.username as author_name,
+        u.full_name,
+        u.avatar_url
+      FROM posts p
+      LEFT JOIN users u ON p.user_id = u.id
+      WHERE p.id = ?
+    `, [result.insertId]);
+
+    return res.json({
+      success: true,
+      data: newPost[0],
+      message: '帖子发布成功'
+    });
+  } catch (error) {
+    console.error('发布帖子失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '发布帖子失败'
+    });
+  }
+});
+
+// 添加评论
+router.post('/posts/:postId/comments', async (req, res) => {
+  try {
+    const postId = req.params.postId;
+    const { user_id, content } = req.body;
+
+    if (!user_id || !content) {
+      return res.status(400).json({
+        success: false,
+        message: '用户ID和内容不能为空'
+      });
+    }
+
+    // 检查帖子是否存在
+    const [postExists] = await pool.execute(
+      'SELECT id FROM posts WHERE id = ?',
+      [postId]
+    );
+
+    if (postExists.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '帖子不存在'
+      });
+    }
+
+    const [result] = await pool.execute(
+      'INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)',
+      [postId, user_id, content]
+    );
+
+    // 获取新创建的评论（关联users表获取作者信息）
+    const [newComment] = await pool.execute(`
+      SELECT 
+        c.id,
+        c.content,
+        c.created_at,
+        u.username as author_name,
+        u.full_name,
+        u.avatar_url
+      FROM comments c
+      LEFT JOIN users u ON c.user_id = u.id
+      WHERE c.id = ?
+    `, [result.insertId]);
+
+    return res.json({
+      success: true,
+      data: newComment[0],
+      message: '评论发表成功'
+    });
+  } catch (error) {
+    console.error('发表评论失败:', error);
+    return res.status(500).json({
+      success: false,
+      message: '发表评论失败'
+    });
+  }
+});
+
 module.exports = router;

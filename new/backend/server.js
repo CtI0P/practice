@@ -15,10 +15,6 @@ app.use(bodyParser.urlencoded({ extended: true })); // 解析URL编码请求体
 const apiRoutes = require('./src/routes/api');
 app.use('/api', apiRoutes);
 
-// // 启动服务器
-// app.listen(PORT, () => {
-//   console.log(`服务器运行在 http://localhost:${PORT}`);
-// });
 
 // 启动前检查数据库连接
 const startServer = async () => {

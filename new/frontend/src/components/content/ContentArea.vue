@@ -80,9 +80,19 @@
         </div>
         
         <!-- 通用内容容器 -->
-        <GenericContent 
+        <!-- <GenericContent 
           v-if="['video-playback', 'online-testing', 'community-interaction', 'data-analysis'].includes(activeMenuItem)"
           :module-id="activeMenuItem"
+          @explore-module="exploreModule"
+        /> -->
+
+        <GenericContent 
+          v-if="['video-playback', 'online-testing', 'data-analysis'].includes(activeMenuItem)"
+          :module-id="activeMenuItem"
+          @explore-module="exploreModule"
+        />
+        <CommunityInteraction 
+          v-if="activeMenuItem === 'community-interaction'"
           @explore-module="exploreModule"
         />
         
@@ -111,6 +121,7 @@ import UserManagementContent from './dif/UserManagementContent.vue';
 import CourseManagementContent from './dif/CourseManagementContent.vue';
 import GenericContent from './dif/GenericContent.vue';
 import RightSidebar from './dif/RightSidebar.vue';
+import CommunityInteraction from './small/CommunityInteraction.vue';
 
 export default {
   name: 'ContentArea',
@@ -121,7 +132,8 @@ export default {
     UserManagementContent,
     CourseManagementContent,
     GenericContent,
-    RightSidebar
+    RightSidebar,
+    CommunityInteraction
   },
   props: {
     activeMenuItem: { type: String, default: 'dashboard' },

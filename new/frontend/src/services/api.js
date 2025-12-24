@@ -133,6 +133,31 @@ export const apiService = {
   // 获取课程下的课时列表
   async getCourseLessons(courseId) {
     return api.get(`/courses/${courseId}/lessons`);
+  },
+
+  // 获取社区帖子列表（带评论）
+  async getCommunityPosts() {
+    return api.get('/posts');
+  },
+
+  // 创建新帖子
+  async createPost(postData) {
+    return api.post('/posts', postData);
+  },
+
+  // 为帖子添加评论
+  async createComment(postId, commentData) {
+    return api.post(`/posts/${postId}/comments`, commentData);
+  },
+
+  // 删除帖子
+  async deletePost(postId) {
+    return api.delete(`/posts/${postId}`);
+  },
+
+  // 删除评论
+  async deleteComment(commentId) {
+    return api.delete(`/comments/${commentId}`);
   }
 };
 
