@@ -10,6 +10,7 @@ const validateNumber = (value, defaultValue = 1, min = 1) => {
 // ========== 核心：分页获取用户列表（适配前端用户管理组件） ==========
 router.get('/users', async (req, res) => {
   try {
+    console.log("nhao");
     // 1. 获取并校验分页参数（和前端分页按钮联动）
     const currentPage = validateNumber(req.query.page, 1, 1); // 当前页，默认1
     const pageSize = validateNumber(req.query.limit, 10, 1); // 每页条数，默认10
@@ -24,15 +25,15 @@ router.get('/users', async (req, res) => {
     const [userRows] = await pool.execute(
       `SELECT 
         id, 
-        username 
+        username, 
         email, 
         full_name, 
         role, 
         avatar_url
        FROM users 
        ORDER BY created_at DESC 
-       LIMIT ? OFFSET ?`,
-      [pageSize, offset]
+       LIMIT 5 OFFSET 0`
+      // [offset]
     );
 
     // 4. 格式化数据（适配前端组件）

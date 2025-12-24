@@ -266,25 +266,44 @@ export default {
   methods: {
     // 获取用户列表
     async fetchUsers(page = 1) {
-      this.loadingUsers = true;
-      try {
-        const result = await apiService.getUsers(page, this.pageSize);
-        if (Array.isArray(result)) {
-          this.userList = result;
-        } else if (result && Array.isArray(result.data)) {
-          this.userList = result.data;
-        } else {
-          this.useMockData();
-        }
-        this.totalUsers = this.userList.length;
-        this.totalPages = Math.ceil(this.totalUsers / this.pageSize);
-      } catch (error) {
-        console.error('获取用户失败:', error);
-        this.useMockData();
-      } finally {
-        this.loadingUsers = false;
-      }
-    },
+  this.loadingUsers = true;
+  try {
+    const result = await apiService.getUsers(page, this.pageSize);
+    console.log("接口返回结果:", result);
+
+    // 适配接口返回结构：result是对象，包含success、data、message
+    if (result.success && result.data && Array.isArray(result.data.userList)) {
+      // 字段映射：把后端返回的字段转成前端组件需要的格式
+      this.userList = result.data.userList.map(user => ({
+        id: user.id,
+        name: user.username, // 后端返回的是username，前端组件需要name
+        email: user.email,
+        full_name: user.full_name || '未设置',
+        role: user.role, // 后端返回的是student/instructor/admin，直接复用
+        // 时间格式化
+        joinDate: user.created_at ? new Date(user.created_at).toLocaleDateString('zh-CN') : '未知',
+        lastLogin: user.updated_at ? new Date(user.updated_at).toLocaleString('zh-CN') : '从未登录',
+        // 状态转换：后端is_active是布尔值，转成active/inactive
+        status: user.is_active ? 'active' : 'inactive'
+      }));
+      
+      // 同步后端返回的分页数据
+      this.totalUsers = result.data.totalUsers;
+      this.currentPage = result.data.currentPage;
+      this.totalPages = result.data.totalPages;
+    } else {
+      // 接口返回异常，使用模拟数据
+      this.useMockData();
+      this.$message.warning("接口数据异常，使用模拟数据");
+    }
+  } catch (error) {
+    console.error('获取用户失败:', error);
+    this.useMockData();
+    this.$message.error(error.message || '获取用户列表失败');
+  } finally {
+    this.loadingUsers = false;
+  }
+},
     
     // 模拟用户数据
     useMockData() {
