@@ -782,4 +782,350 @@ router.post('/posts/:postId/comments', async (req, res) => {
   }
 });
 
+// ========== 获取测试/测验列表 ==========
+router.get('/quizzes', async (req, res) => {
+  try {
+    console.log("获取测试列表请求:", req.query);
+    
+    // 获取并校验分页参数
+    const currentPage = validateNumber(req.query.page, 1, 1);
+    const pageSize = validateNumber(req.query.limit, 10, 1);
+    const offset = Math.max(0, (currentPage - 1) * pageSize);
+    
+    // 获取筛选参数（仅保留存在的course_id）
+    const { course_id } = req.query;
+    
+    // 构建查询条件
+    let query = `
+      SELECT 
+        q.id,
+        q.course_id,
+        q.title,
+        q.description,
+        q.time_limit_min,
+        q.passing_score,
+        q.created_at,
+        c.title as course_title,
+        -- 新增：统计该测试的题目数量（关联questions表）
+        (SELECT COUNT(*) FROM questions WHERE quiz_id = q.id) as question_count
+      FROM quizzes q
+      LEFT JOIN courses c ON q.course_id = c.id
+      WHERE 1=1
+    `;
+    
+    const countQuery = `
+      SELECT COUNT(*) as count 
+      FROM quizzes q
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    const countParams = [];
+    
+    // 仅保留course_id的筛选（表中存在该字段）
+    if (course_id) {
+      query += ' AND q.course_id = ?';
+      countQuery += ' AND q.course_id = ?';
+      params.push(course_id);
+      countParams.push(course_id);
+    }
+    
+    // 分页逻辑（占位符数量与参数匹配）
+    query += ' ORDER BY q.created_at DESC LIMIT ? OFFSET ?';
+    params.push(pageSize, offset);
+
+    console.log('最终执行的SQL:', query);
+    console.log('SQL参数:', params);
+    console.log('总占位符数量:', (query.match(/\?/g) || []).length);
+    console.log('参数数量:', params.length);
+    
+    // 查询总数
+    const [totalRows] = await pool.query(countQuery, countParams);
+    const totalQuizzes = totalRows[0].count || 0;
+    const totalPages = Math.ceil(totalQuizzes / pageSize);
+    
+    // 查询分页数据
+    const [quizzes] = await pool.query(query, params);
+    
+    // 格式化数据（适配前端展示，使用真实的question_count）
+    const quizList = quizzes.map(quiz => ({
+      id: quiz.id,
+      courseId: quiz.course_id,
+      courseTitle: quiz.course_title || '未关联课程',
+      title: quiz.title,
+      description: quiz.description || '暂无描述',
+      question_count: quiz.question_count, // 从子查询获取真实题目数
+      duration: quiz.time_limit_min, // 前端需要的字段名（和前端保持一致）
+      participants: 0, // 可后续关联submissions表统计
+      passing_score: quiz.passing_score,
+      createdAt: new Date(quiz.created_at).toLocaleString('zh-CN')
+    }));
+    
+    return res.json({
+      success: true,
+      data: {
+        quizzes: quizList, // 注意：前端代码中用的是tests，这里要和前端保持字段名一致！
+        totalQuizzes,
+        currentPage,
+        totalPages
+      },
+      message: '获取测试列表成功'
+    });
+    
+  } catch (error) {
+    console.error('获取测试列表失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '获取测试列表失败',
+      error: error.message,
+      sqlError: error.sqlMessage
+    });
+  }
+});
+
+// ========== 获取单个测试详情 ==========
+router.get('/quizzes/:id', async (req, res) => {
+  try {
+    const quizId = req.params.id;
+    
+    const [quizzes] = await pool.execute(
+      `SELECT 
+        q.*,
+        c.title as course_title,
+        u.username as instructor_name
+       FROM quizzes q
+       LEFT JOIN courses c ON q.course_id = c.id
+       LEFT JOIN users u ON c.instructor_id = u.id
+       WHERE q.id = ?`,
+      [quizId]
+    );
+    
+    if (quizzes.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '未找到该测试'
+      });
+    }
+    
+    const quiz = quizzes[0];
+    
+    // 获取该测试的所有问题
+    const [questions] = await pool.execute(
+      `SELECT 
+        id,
+        question_text,
+        question_type,
+        options,
+        correct_answer,
+        points,
+        order_index
+       FROM questions 
+       WHERE quiz_id = ?
+       ORDER BY order_index ASC`,
+      [quizId]
+    );
+    
+    // 解析选择题选项（如果存储的是JSON字符串）
+    const formattedQuestions = questions.map(q => ({
+      ...q,
+      options: q.options ? JSON.parse(q.options) : []
+    }));
+    
+    // 格式化测试详情
+    const quizDetail = {
+      id: quiz.id,
+      courseId: quiz.course_id,
+      courseTitle: quiz.course_title,
+      instructorName: quiz.instructor_name || '未知讲师',
+      title: quiz.title,
+      description: quiz.description || '',
+      timeLimit: quiz.time_limit_min,
+      passingScore: quiz.passing_score,
+      createdAt: new Date(quiz.created_at).toLocaleString('zh-CN'),
+      totalQuestions: questions.length,
+      questions: formattedQuestions,
+      // 计算总分
+      totalPoints: questions.reduce((sum, q) => sum + (q.points || 1), 0)
+    };
+    
+    return res.json({
+      success: true,
+      data: quizDetail,
+      message: '获取测试详情成功'
+    });
+    
+  } catch (error) {
+    console.error('获取测试详情失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '获取测试详情失败',
+      error: error.message
+    });
+  }
+});
+
+// ========== 创建新测试 ==========
+router.post('/quizzes', async (req, res) => {
+  try {
+    const { course_id, title, description, time_limit_min, passing_score } = req.body;
+    
+    // 参数校验
+    if (!course_id || !title || !time_limit_min || !passing_score) {
+      return res.status(400).json({
+        success: false,
+        message: '课程ID、标题、时间限制和及格分数是必填项'
+      });
+    }
+    
+    const [result] = await pool.execute(
+      'INSERT INTO quizzes (course_id, title, description, time_limit_min, passing_score) VALUES (?, ?, ?, ?, ?)',
+      [course_id, title, description || '', time_limit_min, passing_score]
+    );
+    
+    // 获取新创建的测试
+    const [newQuiz] = await pool.execute(
+      'SELECT * FROM quizzes WHERE id = ?',
+      [result.insertId]
+    );
+    
+    return res.status(201).json({
+      success: true,
+      data: newQuiz[0],
+      message: '测试创建成功'
+    });
+    
+  } catch (error) {
+    console.error('创建测试失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '创建测试失败',
+      error: error.message
+    });
+  }
+});
+
+// ========== 更新测试 ==========
+router.put('/quizzes/:id', async (req, res) => {
+  try {
+    const quizId = req.params.id;
+    const { course_id, title, description, time_limit_min, passing_score } = req.body;
+    
+    // 参数校验
+    if (!course_id || !title || !time_limit_min || !passing_score) {
+      return res.status(400).json({
+        success: false,
+        message: '课程ID、标题、时间限制和及格分数是必填项'
+      });
+    }
+    
+    const [result] = await pool.execute(
+      'UPDATE quizzes SET course_id = ?, title = ?, description = ?, time_limit_min = ?, passing_score = ? WHERE id = ?',
+      [course_id, title, description || '', time_limit_min, passing_score, quizId]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '未找到该测试'
+      });
+    }
+    
+    // 获取更新后的测试
+    const [updatedQuiz] = await pool.execute(
+      'SELECT * FROM quizzes WHERE id = ?',
+      [quizId]
+    );
+    
+    return res.json({
+      success: true,
+      data: updatedQuiz[0],
+      message: '测试更新成功'
+    });
+    
+  } catch (error) {
+    console.error('更新测试失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '更新测试失败',
+      error: error.message
+    });
+  }
+});
+
+// ========== 删除测试 ==========
+router.delete('/quizzes/:id', async (req, res) => {
+  try {
+    const quizId = req.params.id;
+    
+    // 先删除关联的问题（如果有级联删除则不需要）
+    await pool.execute('DELETE FROM questions WHERE quiz_id = ?', [quizId]);
+    
+    const [result] = await pool.execute('DELETE FROM quizzes WHERE id = ?', [quizId]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '未找到该测试'
+      });
+    }
+    
+    return res.json({
+      success: true,
+      message: '测试删除成功'
+    });
+    
+  } catch (error) {
+    console.error('删除测试失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '删除测试失败',
+      error: error.message
+    });
+  }
+});
+
+// ========== 获取测试问题 ==========
+router.get('/quizzes/:id/questions', async (req, res) => {
+  try {
+    const quizId = req.params.id;
+    
+    const [questions] = await pool.execute(
+      `SELECT 
+        id,
+        quiz_id,
+        question_text,
+        question_type,
+        options,
+        correct_answer,
+        points,
+        order_index,
+        created_at
+      FROM questions 
+      WHERE quiz_id = ?
+      ORDER BY order_index ASC`,
+      [quizId]
+    );
+    
+    // 解析选择题选项（如果存储的是JSON字符串）
+    const formattedQuestions = questions.map(q => ({
+      ...q,
+      options: q.options ? JSON.parse(q.options) : []
+    }));
+    
+    return res.json({
+      success: true,
+      data: formattedQuestions,
+      message: '获取测试问题成功'
+    });
+    
+  } catch (error) {
+    console.error('获取测试问题失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '获取测试问题失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

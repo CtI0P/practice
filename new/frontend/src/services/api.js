@@ -2,7 +2,8 @@ import axios from 'axios';
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:3001/api',
+  // baseURL: process.env.NODE_ENV === 'production' ? '/api' : 'http://localhost:3001/api',
+  baseURL: 'http://localhost:3001/api',
   timeout: 5000,
   headers: {
     'Content-Type': 'application/json'
@@ -160,110 +161,91 @@ export const apiService = {
     return api.delete(`/comments/${commentId}`);
   },
 
-  // 获取测试列表
+  // 获取测试详情
   async getQuizzes(params = {}) {
     try {
-      const response = await axios.get('/api/quizzes', { params });
-      return response.data;
+      return await api.get('/quizzes', { params });
     } catch (error) {
       console.error('获取测试列表失败:', error);
       throw error;
     }
   },
 
-  // 创建测试
   async createQuiz(quizData) {
     try {
-      const response = await axios.post('/api/quizzes', quizData);
-      return response.data;
+      return await api.post('/quizzes', quizData);
     } catch (error) {
       console.error('创建测试失败:', error);
       throw error;
     }
   },
 
-  // 获取测试详情
   async getQuizDetail(quizId) {
     try {
-      const response = await axios.get(`/api/quizzes/${quizId}`);
-      return response.data;
+      return await api.get(`/quizzes/${quizId}`);
     } catch (error) {
       console.error('获取测试详情失败:', error);
       throw error;
     }
   },
 
-  // 更新测试
   async updateQuiz(quizId, quizData) {
     try {
-      const response = await axios.put(`/api/quizzes/${quizId}`, quizData);
-      return response.data;
+      return await api.put(`/quizzes/${quizId}`, quizData);
     } catch (error) {
       console.error('更新测试失败:', error);
       throw error;
     }
   },
 
-  // 获取测试题目
   async getQuizQuestions(quizId) {
     try {
-      const response = await axios.get(`/api/quizzes/${quizId}/questions`);
-      return response.data;
+      return await api.get(`/quizzes/${quizId}/questions`);
     } catch (error) {
       console.error('获取测试题目失败:', error);
       throw error;
     }
   },
 
-  // 创建题目
   async createQuestion(questionData) {
     try {
-      const response = await axios.post('/api/questions', questionData);
-      return response.data;
+      return await api.post('/questions', questionData);
     } catch (error) {
       console.error('创建题目失败:', error);
       throw error;
     }
   },
 
-  // 更新题目
   async updateQuestion(questionId, questionData) {
     try {
-      const response = await axios.put(`/api/questions/${questionId}`, questionData);
-      return response.data;
+      return await api.put(`/questions/${questionId}`, questionData);
     } catch (error) {
       console.error('更新题目失败:', error);
       throw error;
     }
   },
 
-  // 删除题目
   async deleteQuestion(questionId) {
     try {
-      const response = await axios.delete(`/api/questions/${questionId}`);
-      return response.data;
+      return await api.delete(`/questions/${questionId}`);
     } catch (error) {
       console.error('删除题目失败:', error);
       throw error;
     }
   },
 
-  // 提交测试答案
   async submitQuiz(submissionData) {
     try {
-      const response = await axios.post('/api/quizzes/submit', submissionData);
-      return response.data;
+      return await api.post('/quizzes/submit', submissionData);
     } catch (error) {
       console.error('提交测试失败:', error);
       throw error;
     }
   },
 
-  // 获取测试结果
   async getQuizResults(quizId) {
     try {
-      const response = await axios.get(`/api/quizzes/${quizId}/results`);
-      return response.data;
+      return await api.get(`/quizzes/${quizId}/results`);
     } catch (error) {
       console.error('获取测试结果失败:', error);
       throw error;

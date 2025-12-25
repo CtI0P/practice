@@ -551,17 +551,7 @@ export default {
       this.testMode = 'list';
       this.currentTestId = null;
     },
-
-    handleStartTest(testId) {
-      console.log('开始测试:', testId);
-      // 这里可以跳转到测试页面或显示测试组件
-      this.$emit('start-test', testId);
-    },
     
-    handleViewResults(testId) {
-      console.log('查看测试结果:', testId);
-      this.$emit('view-results', testId);
-    }
   },
   mounted() {
     // 初始加载对应菜单的数据
