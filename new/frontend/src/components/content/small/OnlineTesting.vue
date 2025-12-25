@@ -76,16 +76,32 @@
 
     <!-- 测试结果模式 -->
     <div v-else-if="testMode === 'results' && currentTestId" class="test-results">
-      <div class="results-header">
-        <h3>测试结果</h3>
-        <button class="btn btn-outline" @click="backToList">
-          <i class="fas fa-arrow-left"></i> 返回列表
-        </button>
-      </div>
-      <!-- 这里可以添加测试结果的具体内容 -->
-      <div class="results-content">
-        <p>测试结果页面正在开发中...</p>
-      </div>
+        <div class="results-header">
+            <h3>测试结果 - {{ currentTest.title || '未知测试' }}</h3>
+            <button class="btn btn-outline" @click="backToList">
+            <i class="fas fa-arrow-left"></i> 返回列表
+            </button>
+        </div>
+        <!-- 分数展示（替换原有占位文本） -->
+        <div class="results-content">
+            <div class="score-card">
+                <!-- 分数展示核心区域 -->
+                <div class="score-circle">
+                    {{ currentTestResult?.score || 0 }}
+                </div>
+                <div class="score-info">
+                    <p class="score-desc">
+                    你的得分：<span class="user-score">{{ currentTestResult?.score || 0 }}</span>
+                    / 
+                    <span class="total-score">{{ currentTestResult?.totalScore || currentTest.passing_score }}</span>
+                    </p>
+                    <p class="pass-status" :class="{ pass: isPass, fail: !isPass }">
+                    {{ isPass ? '恭喜你，测试及格！' : '很遗憾，测试未及格，请重新尝试' }}
+                    </p>
+                    <p class="pass-score-tip">及格分数：{{ currentTest.passing_score }} 分</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 测试创建/编辑模态框 -->
@@ -241,32 +257,41 @@ export default {
   },
   data() {
     return {
-      tests: [],
-      currentTest: {
+        tests: [],
+        currentTest: {
         title: '',
         description: '',
-        duration: 60, // 对应后端time_limit_min
+        duration: 60,
         passing_score: 60,
         questions: []
-      },
-      currentQuestions: [],
-      editingTest: null,
-      editingQuestion: null,
-      showTestModal: false,
-      showQuestionModal: false,
-      showQuestionEditModal: false,
-      // 移除判断题、简答题，仅保留单选/多选（适配表结构）
-      questionTypes: [
+        },
+        currentQuestions: [],
+        editingTest: null,
+        editingQuestion: null,
+        showTestModal: false,
+        showQuestionModal: false,
+        showQuestionEditModal: false,
+        questionTypes: [
         { value: 'single_choice', label: '单选题' },
         { value: 'multiple_choice', label: '多选题' }
-      ],
-      questionTypeLabels: {
+        ],
+        questionTypeLabels: {
         'single_choice': '单选题',
         'multiple_choice': '多选题'
-      },
-      testMode: 'list',
-      currentTestId: null
+        },
+        testMode: 'list',
+        currentTestId: null,
+        // 新增：存储测试结果（分数等信息）
+        currentTestResult: null 
     };
+  },
+  computed: {
+    // 判断是否及格
+    isPass() {
+      if (!this.currentTestResult || !this.currentTest) return false;
+      // 得分 >= 及格分 即为及格
+      return (this.currentTestResult.score || 0) >= (this.currentTest.passing_score || 60);
+    }
   },
   created() {
     this.loadTests();
@@ -522,10 +547,14 @@ export default {
     },
     
     handleTestSubmitted(result) {
-      this.testMode = 'list';
-      this.currentTestId = null; // 重置testId
-      this.$emit('explore-module', 'online-testing');
-      this.$message?.success(`测试提交成功！得分：${result.score || 0}`);
+        // 切换到结果模式，保留测试ID和结果
+        this.currentTestResult = result; // 保存分数结果
+        this.testMode = 'results'; // 切换到结果页面
+        // 注意：不要清空 currentTestId，否则结果页面无法关联测试信息
+        // this.currentTestId 保持不变（答题时已赋值）
+
+        this.$emit('explore-module', 'online-testing');
+        this.$message?.success(`测试提交成功！得分：${result.score || 0}`);
     },
     
     backToList() {
