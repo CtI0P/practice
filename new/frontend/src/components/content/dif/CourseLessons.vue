@@ -1,4 +1,5 @@
 <template>
+<<<<<<< HEAD
   <div class="course-lessons-container">
     <!-- 加载状态 -->
     <div class="lesson-header">
@@ -131,11 +132,22 @@
         </div>
       </div>
     </div>
+=======
+  <div class="course-lessons">
+    <h2>课程课时列表（课程ID：{{ courseId }}）</h2>
+
+    <ul>
+      <li v-for="lesson in lessons" :key="lesson.id">
+        {{ lesson.title }}（{{ lesson.duration_sec }} 秒）
+      </li>
+    </ul>
+>>>>>>> b02882ba6f9c18e2b886837faccdf30d8abb927b
   </div>
 </template>
 
 <script>
 import { apiService } from '@/services/api';
+<<<<<<< HEAD
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import 'videojs-contrib-hls'; // 支持HLS流媒体
@@ -471,10 +483,25 @@ export default {
       if (!total) return '0%';
       const percent = Math.floor((watched / total) * 100);
       return `${percent}%`;
+=======
+
+export default {
+  props: ['courseId'],
+  data() {
+    return {
+      lessons: []
+    };
+  },
+  async mounted() {
+    const res = await apiService.getCourseLessons(this.courseId);
+    if (res.success) {
+      this.lessons = res.data.lessons;
+>>>>>>> b02882ba6f9c18e2b886837faccdf30d8abb927b
     }
   }
 };
 </script>
+<<<<<<< HEAD
 
 <style scoped>
 .course-lessons-container {
@@ -786,3 +813,5 @@ export default {
   }
 }
 </style>
+=======
+>>>>>>> b02882ba6f9c18e2b886837faccdf30d8abb927b

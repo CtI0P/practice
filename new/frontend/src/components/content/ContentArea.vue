@@ -78,6 +78,12 @@
         <div v-if="loadingCourses && activeMenuItem === 'course-management'" class="loading-placeholder">
           <p>正在加载课程数据...</p>
         </div>
+
+        <CourseLessons
+          v-if="activeMenuItem === 'course-lessons'"
+          :course-id="selectedCourseId"
+        />
+
         
         <!-- 通用内容容器 -->
         <!-- <GenericContent 
@@ -130,6 +136,7 @@ import GenericContent from './dif/GenericContent.vue';
 import RightSidebar from './dif/RightSidebar.vue';
 import CommunityInteraction from './small/CommunityInteraction.vue';
 import OnlineTesting from './small/OnlineTesting.vue';
+import CourseLessons from './dif/CourseLessons.vue';
 
 export default {
   name: 'ContentArea',
@@ -143,6 +150,7 @@ export default {
     RightSidebar,
     CommunityInteraction,
     OnlineTesting,
+    CourseLessons
   },
   props: {
     activeMenuItem: { type: String, default: 'dashboard' },
@@ -165,6 +173,8 @@ export default {
       // 课程列表数据（删除重复定义，仅保留一个）
       courseList: [],
       loadingCourses: false,
+
+      selectedCourseId: null,
 
       // 加载状态
       loading: false,
@@ -481,6 +491,9 @@ export default {
     
     // 查看课程
     async viewCourse(courseId) {
+          this.selectedCourseId = courseId;
+          this.$emit('update:activeMenuItem', 'course-lessons');
+          console.log('当前 activeMenuItem:', this.activeMenuItem);
       try {
         const res = await apiService.getCourseDetail(courseId);
         if (res.success) {
