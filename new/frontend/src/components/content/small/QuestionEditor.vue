@@ -199,13 +199,15 @@ export default {
         options: []
       };
 
-      // option_a~option_d 转为 options 数组
+      // 把option_a~option_d转为options数组，并根据选项内容判断是否为正确答案
       if (['single_choice', 'multiple_choice'].includes(localQ.question_type)) {
         const optionLabels = ['a', 'b', 'c', 'd'];
         localQ.options = optionLabels.map(label => {
           const optionText = question[`option_${label}`] || '';
-          const optionLetter = String.fromCharCode(65 + optionLabels.indexOf(label));
-          const isCorrect = localQ.correct_answer ? localQ.correct_answer.includes(optionLetter) : false;
+          // 多选时correct_answer是逗号分隔的文本，拆分后匹配当前选项文本
+          const isCorrect = localQ.correct_answer
+            ? localQ.correct_answer.split(',').includes(optionText.trim())
+            : false;
           return { text: optionText, correct: isCorrect };
         });
       }
@@ -225,22 +227,24 @@ export default {
         options: undefined // 移除子组件独有的字段
       };
 
-      // options 数组转为 option_a~option_d
       if (['single_choice', 'multiple_choice'].includes(localQ.question_type)) {
         const optionLabels = ['a', 'b', 'c', 'd'];
+        const correctOptionTexts = []; // 存储正确选项的「文本内容」
+
+        // 遍历选项，赋值option_a~option_d，并收集正确选项的文本
         localQ.options.forEach((opt, index) => {
           if (optionLabels[index]) {
-            question[`option_${optionLabels[index]}`] = opt.text || '';
+            const optionKey = `option_${optionLabels[index]}`;
+            question[optionKey] = opt.text || '';
+            // 只收集正确选项的文本（去空格，避免空内容）
+            if (opt.correct && opt.text.trim()) {
+              correctOptionTexts.push(opt.text.trim());
+            }
           }
         });
 
-        // 生成 correct_answer（单选：A；多选：A,B,C）
-        const correctIndexes = localQ.options
-          .map((opt, idx) => opt.correct ? idx : -1)
-          .filter(idx => idx !== -1);
-        question.correct_answer = correctIndexes
-          .map(idx => String.fromCharCode(65 + idx))
-          .join(',');
+        // 生成correct_answer：多选时用逗号分隔，单选时直接存文本
+        question.correct_answer = correctOptionTexts.join(',');
       }
 
       return question;
