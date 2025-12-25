@@ -2,7 +2,8 @@
   <div class="question-editor">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>{{ editingQuestion ? '编辑题目' : '添加题目' }}</h3>
+        <!-- 修复：通过 localQuestion.id 判断编辑/新增 -->
+        <h3>{{ localQuestion.id ? '编辑题目' : '添加题目' }}</h3>
       </div>
       <div class="modal-body">
         <form @submit.prevent="handleSave">
@@ -58,7 +59,7 @@
             </div>
           </div>
 
-          <!-- 选择题选项 -->
+          <!-- 选择题选项（仅保留单选/多选，移除冗余逻辑） -->
           <div class="options-section" v-if="showOptions">
             <div class="options-header">
               <h4>选项设置</h4>
@@ -100,60 +101,13 @@
                     <input
                       type="checkbox"
                       :checked="option.correct"
-                      :disabled="isSingleChoice && isOptionSelected(option)"
+                      :disabled="isSingleChoice && isOptionSelected(option) && localQuestion.options.some((opt, i) => opt.correct && i !== index)"
                       @change="handleCorrectChange(index)"
                     />
                     <span>正确答案</span>
                   </label>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- 判断题选项 -->
-          <div class="true-false-section" v-else-if="localQuestion.question_type === 'true_false'">
-            <div class="options-header">
-              <h4>判断题设置</h4>
-            </div>
-            <div class="true-false-options">
-              <label class="radio-label">
-                <input
-                  type="radio"
-                  :checked="localQuestion.correct_answer === 'true'"
-                  @change="localQuestion.correct_answer = 'true'"
-                />
-                <span>正确</span>
-              </label>
-              <label class="radio-label">
-                <input
-                  type="radio"
-                  :checked="localQuestion.correct_answer === 'false'"
-                  @change="localQuestion.correct_answer = 'false'"
-                />
-                <span>错误</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 简答题设置 -->
-          <div class="short-answer-section" v-else-if="localQuestion.question_type === 'short_answer'">
-            <div class="form-group">
-              <label for="correctAnswer">参考答案</label>
-              <textarea
-                id="correctAnswer"
-                v-model="localQuestion.correct_answer"
-                placeholder="请输入参考答案"
-                rows="3"
-              ></textarea>
-            </div>
-            <div class="form-group">
-              <label for="keywords">关键词（逗号分隔）</label>
-              <input
-                id="keywords"
-                type="text"
-                v-model="localQuestion.keywords"
-                placeholder="关键词1,关键词2,关键词3"
-              />
             </div>
           </div>
 
@@ -188,27 +142,30 @@ export default {
     question: {
       type: Object,
       default: () => ({
+        id: null,
         question_text: '',
-        question_type: '',
-        points: 10,
+        question_type: 'single_choice',
+        points: 1,
         order_index: 0,
-        options: [],
+        option_a: '',
+        option_b: '',
+        option_c: '',
+        option_d: '',
         correct_answer: '',
         explanation: ''
       })
     },
     questionTypes: {
       type: Array,
-      default: () => []
+      default: () => [
+        { value: 'single_choice', label: '单选题' },
+        { value: 'multiple_choice', label: '多选题' }
+      ]
     }
   },
   data() {
     return {
-      localQuestion: {
-        ...this.question,
-        // 确保 options 数组存在
-        options: this.question.options || []
-      }
+      localQuestion: this.formatQuestionToLocal(this.question)
     };
   },
   computed: {
@@ -220,20 +177,77 @@ export default {
     }
   },
   watch: {
-    // 当 prop 变化时更新本地数据
     question: {
       handler(newQuestion) {
-        this.localQuestion = {
-          ...newQuestion,
-          options: newQuestion.options || []
-        };
+        this.localQuestion = this.formatQuestionToLocal(newQuestion);
       },
       deep: true
     }
   },
   methods: {
+    // 格式转换：后端格式 → 子组件格式
+    formatQuestionToLocal(question) {
+      const localQ = {
+        ...question,
+        id: question.id || null,
+        question_text: question.question_text || '',
+        question_type: question.question_type || 'single_choice',
+        points: question.points || 1,
+        order_index: question.order_index || 0,
+        correct_answer: question.correct_answer || '',
+        explanation: question.explanation || '',
+        options: []
+      };
+
+      // option_a~option_d 转为 options 数组
+      if (['single_choice', 'multiple_choice'].includes(localQ.question_type)) {
+        const optionLabels = ['a', 'b', 'c', 'd'];
+        localQ.options = optionLabels.map(label => {
+          const optionText = question[`option_${label}`] || '';
+          const optionLetter = String.fromCharCode(65 + optionLabels.indexOf(label));
+          const isCorrect = localQ.correct_answer ? localQ.correct_answer.includes(optionLetter) : false;
+          return { text: optionText, correct: isCorrect };
+        });
+      }
+
+      return localQ;
+    },
+
+    // 格式转换：子组件格式 → 后端格式
+    formatLocalToQuestion(localQ) {
+      const question = {
+        ...localQ,
+        option_a: '',
+        option_b: '',
+        option_c: '',
+        option_d: '',
+        correct_answer: '',
+        options: undefined // 移除子组件独有的字段
+      };
+
+      // options 数组转为 option_a~option_d
+      if (['single_choice', 'multiple_choice'].includes(localQ.question_type)) {
+        const optionLabels = ['a', 'b', 'c', 'd'];
+        localQ.options.forEach((opt, index) => {
+          if (optionLabels[index]) {
+            question[`option_${optionLabels[index]}`] = opt.text || '';
+          }
+        });
+
+        // 生成 correct_answer（单选：A；多选：A,B,C）
+        const correctIndexes = localQ.options
+          .map((opt, idx) => opt.correct ? idx : -1)
+          .filter(idx => idx !== -1);
+        question.correct_answer = correctIndexes
+          .map(idx => String.fromCharCode(65 + idx))
+          .join(',');
+      }
+
+      return question;
+    },
+
     handleTypeChange() {
-      // 根据题目类型初始化选项
+      // 初始化单选/多选选项
       if (this.showOptions && (!this.localQuestion.options || this.localQuestion.options.length === 0)) {
         this.localQuestion.options = [
           { text: '', correct: false },
@@ -241,17 +255,6 @@ export default {
           { text: '', correct: false },
           { text: '', correct: false }
         ];
-      } else if (this.localQuestion.question_type === 'true_false') {
-        if (!this.localQuestion.correct_answer) {
-          this.localQuestion.correct_answer = 'true';
-        }
-      } else if (this.localQuestion.question_type === 'short_answer') {
-        if (this.localQuestion.correct_answer === undefined) {
-          this.localQuestion.correct_answer = '';
-        }
-        if (this.localQuestion.keywords === undefined) {
-          this.localQuestion.keywords = '';
-        }
       }
     },
 
@@ -261,7 +264,6 @@ export default {
 
     removeOption(index) {
       if (this.localQuestion.options.length > 2) {
-        // 创建新的数组而不是修改原数组
         this.localQuestion.options = this.localQuestion.options.filter((_, i) => i !== index);
       }
     },
@@ -271,7 +273,6 @@ export default {
     },
 
     updateOptionText(index, value) {
-      // 创建新的选项数组
       const newOptions = [...this.localQuestion.options];
       newOptions[index] = { ...newOptions[index], text: value };
       this.localQuestion.options = newOptions;
@@ -279,54 +280,48 @@ export default {
 
     handleCorrectChange(index) {
       const newOptions = [...this.localQuestion.options];
-      
-      // 切换当前选项的正确状态
-      newOptions[index] = { 
-        ...newOptions[index], 
-        correct: !newOptions[index].correct 
-      };
-      
-      if (this.isSingleChoice && newOptions[index].correct) {
-        // 如果是单选题，只能有一个正确答案
-        newOptions.forEach((option, i) => {
-          if (i !== index) {
-            option.correct = false;
-          }
+      newOptions[index] = { ...newOptions[index], correct: !newOptions[index].correct };
+
+      // 单选题：确保只有一个正确答案
+      if (this.isSingleChoice) {
+        newOptions.forEach((opt, i) => {
+          if (i !== index) opt.correct = false;
         });
       }
-      
+
       this.localQuestion.options = newOptions;
     },
 
     handleSave() {
-      // 验证数据
+      // 验证单选/多选选项
       if (this.showOptions) {
         const hasEmptyOption = this.localQuestion.options.some(opt => !opt.text.trim());
         const hasCorrectOption = this.localQuestion.options.some(opt => opt.correct);
-        
+
         if (hasEmptyOption) {
           this.$message?.error('请填写所有选项内容');
           return;
         }
-        
+
         if (!hasCorrectOption) {
           this.$message?.error('请至少选择一个正确答案');
           return;
         }
       }
 
-      if (this.localQuestion.question_type === 'true_false' && !this.localQuestion.correct_answer) {
-        this.$message?.error('请选择正确答案');
+      // 验证题目内容
+      if (!this.localQuestion.question_text.trim()) {
+        this.$message?.error('请填写题目内容');
         return;
       }
 
-      // 深拷贝数据，确保不会修改原始对象
-      const questionToSave = JSON.parse(JSON.stringify(this.localQuestion));
-      this.$emit('save', questionToSave);
+      // 格式转换后传递给父组件
+      const questionToSave = this.formatLocalToQuestion(this.localQuestion);
+      const finalQuestion = JSON.parse(JSON.stringify(questionToSave));
+      this.$emit('save', finalQuestion);
     }
   },
   mounted() {
-    // 组件挂载时初始化
     this.handleTypeChange();
   }
 };

@@ -1188,7 +1188,6 @@ router.get('/quizzes/:id/questions', async (req, res) => {
   }
 });
 
-// 提交测试接口 - POST /api/quizzes/submit
 // ========== 提交测试 ==========
 router.post('/quizzes/submit', async (req, res) => {
   try {
@@ -1308,6 +1307,87 @@ router.post('/quizzes/submit', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: '提交测试失败',
+      error: error.message
+    });
+  }
+});
+
+router.post('/questions', async (req, res) => {
+  try {
+    const { quiz_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points, order_index } = req.body;
+
+    // 参数校验
+    if (!quiz_id || !question_text || !question_type || !correct_answer) {
+      return res.status(400).json({
+        success: false,
+        message: '测试ID、题目内容、题目类型、正确答案为必填项'
+      });
+    }
+
+    // 插入数据库
+    const [result] = await pool.execute(
+      `INSERT INTO questions (quiz_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points, order_index)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [quiz_id, question_text, question_type, option_a || '', option_b || '', option_c || '', option_d || '', correct_answer, points || 1, order_index || 0]
+    );
+
+    // 返回新创建的题目
+    const [newQuestion] = await pool.execute('SELECT * FROM questions WHERE id = ?', [result.insertId]);
+    return res.status(201).json({
+      success: true,
+      data: { question: newQuestion[0] },
+      message: '题目创建成功'
+    });
+  } catch (error) {
+    console.error('创建题目失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '创建题目失败',
+      error: error.message
+    });
+  }
+});
+
+router.put('/questions/:id', async (req, res) => {
+  try {
+    const questionId = req.params.id;
+    const { quiz_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points, order_index } = req.body;
+
+    // 参数校验
+    if (!quiz_id || !question_text || !question_type || !correct_answer) {
+      return res.status(400).json({
+        success: false,
+        message: '测试ID、题目内容、题目类型、正确答案为必填项'
+      });
+    }
+
+    // 更新数据库
+    const [result] = await pool.execute(
+      `UPDATE questions 
+       SET quiz_id = ?, question_text = ?, question_type = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct_answer = ?, points = ?, order_index = ?
+       WHERE id = ?`,
+      [quiz_id, question_text, question_type, option_a || '', option_b || '', option_c || '', option_d || '', correct_answer, points || 1, order_index || 0, questionId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '题目不存在'
+      });
+    }
+
+    // 返回更新后的题目
+    const [updatedQuestion] = await pool.execute('SELECT * FROM questions WHERE id = ?', [questionId]);
+    return res.json({
+      success: true,
+      data: { question: updatedQuestion[0] },
+      message: '题目更新成功'
+    });
+  } catch (error) {
+    console.error('更新题目失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '更新题目失败',
       error: error.message
     });
   }

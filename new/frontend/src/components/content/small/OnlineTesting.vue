@@ -421,8 +421,20 @@ export default {
     },
 
     showAddQuestionModal() {
-      this.editingQuestion = null;
-      this.showQuestionEditModal = true;
+        // 关键：初始化新增题目的默认值，而非设为null
+        this.editingQuestion = {
+            question_type: 'single_choice', // 默认单选（和你的questionTypes对应）
+            question_text: '',
+            option_a: '',
+            option_b: '',
+            option_c: '',
+            option_d: '',
+            correct_answer: '',
+            points: 1,
+            order_index: 0,
+            id: null // 标记为新增题目（无id）
+        };
+        this.showQuestionEditModal = true;
     },
 
     editQuestion(question) {
@@ -447,50 +459,48 @@ export default {
     },
 
     async saveQuestion(question) {
-      if (!question || !this.currentTest.id) {
-        this.$message?.warning('题目或测试信息无效，无法保存');
-        return;
-      }
-      try {
-        // 构造题目数据：适配option_a~option_d字段
-        const data = {
-          quiz_id: this.currentTest.id,
-          question_text: question.question_text,
-          question_type: question.question_type,
-          option_a: question.option_a || '',
-          option_b: question.option_b || '',
-          option_c: question.option_c || '',
-          option_d: question.option_d || '',
-          correct_answer: question.correct_answer || '',
-          points: question.points || 1,
-          order_index: question.order_index || 0
-        };
-
-        if (question.id) {
-          // 更新题目
-          data.id = question.id;
-          const response = await apiService.updateQuestion(question.id, data);
-          if (response.success) {
-            const index = this.currentQuestions.findIndex(q => q.id === question.id);
-            if (index !== -1) {
-              this.currentQuestions.splice(index, 1, response.data.question);
-            }
-            this.$message?.success('题目更新成功');
-          }
-        } else {
-          // 添加新题目
-          const response = await apiService.createQuestion(data);
-          if (response.success) {
-            this.currentQuestions.push(response.data.question);
-            this.$message?.success('题目添加成功');
-          }
+        // 验证必要参数
+        if (!question || !this.currentTest.id) {
+            this.$message?.warning('题目或测试信息无效，无法保存');
+            return;
         }
 
-        this.closeQuestionEditModal();
-      } catch (error) {
-        console.error('保存题目失败:', error);
-        this.$message?.error('保存题目失败，请重试');
-      }
+        try {
+            // 给题目数据添加quiz_id（关联当前测试）
+            const questionData = {
+                ...question,
+                quiz_id: this.currentTest.id // 关键：关联当前测试的ID
+            };
+
+            let response;
+            if (question.id) {
+                // 编辑题目：调用PUT接口
+                response = await apiService.updateQuestion(question.id, questionData);
+                this.$message?.success('题目更新成功');
+                } else {
+                // 新增题目：调用POST接口
+                response = await apiService.createQuestion(questionData);
+                this.$message?.success('题目添加成功');
+            }
+
+            // 更新当前题目列表
+            if (question.id) {
+                // 编辑：替换列表中对应的题目
+                const index = this.currentQuestions.findIndex(q => q.id === question.id);
+                if (index !== -1) {
+                    this.currentQuestions.splice(index, 1, response.data.question);
+                }
+            } else {
+                // 新增：添加到列表
+                this.currentQuestions.push(response.data.question);
+            }
+
+            // 关闭编辑弹窗
+            this.closeQuestionEditModal();
+        } catch (error) {
+            console.error('保存题目失败:', error);
+            this.$message?.error('保存题目失败，请重试');
+        }
     },
 
     refreshTests() {
