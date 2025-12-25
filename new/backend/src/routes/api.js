@@ -833,11 +833,6 @@ router.get('/quizzes', async (req, res) => {
     // 分页逻辑（占位符数量与参数匹配）
     query += ' ORDER BY q.created_at DESC LIMIT ? OFFSET ?';
     params.push(pageSize, offset);
-
-    console.log('最终执行的SQL:', query);
-    console.log('SQL参数:', params);
-    console.log('总占位符数量:', (query.match(/\?/g) || []).length);
-    console.log('参数数量:', params.length);
     
     // 查询总数
     const [totalRows] = await pool.query(countQuery, countParams);
@@ -910,25 +905,28 @@ router.get('/quizzes/:id', async (req, res) => {
     const quiz = quizzes[0];
     
     // 获取该测试的所有问题
-    const [questions] = await pool.execute(
+    const [questions] = await pool.query(
       `SELECT 
         id,
         question_text,
         question_type,
-        options,
-        correct_answer,
+        option_a,  -- 新增
+        option_b,  -- 新增
+        option_c,  -- 新增
+        option_d,  -- 新增
+        correct_answer,  -- 新增
         points,
         order_index
-       FROM questions 
-       WHERE quiz_id = ?
-       ORDER BY order_index ASC`,
+      FROM questions 
+      WHERE quiz_id = ?
+      ORDER BY order_index ASC`,
       [quizId]
     );
     
-    // 解析选择题选项（如果存储的是JSON字符串）
+    // 格式化选项为数组（供前端渲染）
     const formattedQuestions = questions.map(q => ({
       ...q,
-      options: q.options ? JSON.parse(q.options) : []
+      options: [q.option_a, q.option_b, q.option_c, q.option_d]  // 把4个选项转为数组
     }));
     
     // 格式化测试详情
@@ -1089,32 +1087,50 @@ router.get('/quizzes/:id/questions', async (req, res) => {
   try {
     const quizId = req.params.id;
     
+    // 修正SQL：删除不存在的created_at字段，同时保留你需要的有效字段
     const [questions] = await pool.execute(
       `SELECT 
         id,
         quiz_id,
         question_text,
         question_type,
-        options,
+        option_a,
+        option_b,
+        option_c,
+        option_d,
         correct_answer,
         points,
-        order_index,
-        created_at
+        order_index
       FROM questions 
       WHERE quiz_id = ?
       ORDER BY order_index ASC`,
       [quizId]
     );
     
-    // 解析选择题选项（如果存储的是JSON字符串）
-    const formattedQuestions = questions.map(q => ({
-      ...q,
-      options: q.options ? JSON.parse(q.options) : []
-    }));
+    // 格式化选项：转为前端需要的{text: 内容}对象数组，过滤空选项
+    const formattedQuestions = questions.map(q => {
+      const rawOptions = [
+        { text: q.option_a },
+        { text: q.option_b },
+        { text: q.option_c },
+        { text: q.option_d }
+      ];
+      const validOptions = rawOptions.filter(opt => opt.text && opt.text.trim() !== '');
+      
+      return {
+        ...q,
+        options: validOptions,
+        // 移除多余的单个选项字段（可选，优化返回数据）
+        option_a: undefined,
+        option_b: undefined,
+        option_c: undefined,
+        option_d: undefined
+      };
+    });
     
     return res.json({
       success: true,
-      data: formattedQuestions,
+      data: { questions: formattedQuestions }, // 匹配前端接口期望格式
       message: '获取测试问题成功'
     });
     

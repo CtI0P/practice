@@ -24,24 +24,24 @@
           <div class="test-card">
             <div class="test-info">
               <h3>{{ test.title }}</h3>
-              <p>{{ test.description }}</p>
+              <p>{{ test.description || '无描述' }}</p>
               <div class="test-meta">
                 <span class="meta-item">
                   <i class="fas fa-question-circle"></i>
-                  {{ test.question_count }} 道题目
+                  {{ test.question_count || 0 }} 道题目
                 </span>
                 <span class="meta-item">
                   <i class="fas fa-clock"></i>
-                  {{ test.duration }} 分钟
+                  {{ test.duration || test.time_limit_min || 60 }} 分钟
                 </span>
                 <span class="meta-item">
                   <i class="fas fa-user-graduate"></i>
-                  {{ test.participants }} 人参与
+                  {{ test.participants || 0 }} 人参与
                 </span>
               </div>
             </div>
             <div class="test-actions">
-              <button class="btn btn-outline" @click="startTest(test)">
+              <button class="btn btn-outline" @click="startTest(test)" :disabled="!test.question_count || test.question_count === 0">
                 <i class="fas fa-play"></i> 开始测试
               </button>
               <button class="btn btn-outline" @click="editTest(test)">
@@ -66,16 +66,16 @@
       </div>
     </div>
 
-    <!-- 测试进行模式 -->
+    <!-- 测试进行模式：添加v-if确保currentTestId有效 -->
     <TestTaking
-      v-else-if="testMode === 'taking'"
+      v-else-if="testMode === 'taking' && currentTestId"
       :test-id="currentTestId"
       @test-submitted="handleTestSubmitted"
       @back-to-list="backToList"
     />
 
     <!-- 测试结果模式 -->
-    <div v-else-if="testMode === 'results'" class="test-results">
+    <div v-else-if="testMode === 'results' && currentTestId" class="test-results">
       <div class="results-header">
         <h3>测试结果</h3>
         <button class="btn btn-outline" @click="backToList">
@@ -155,12 +155,12 @@
     <div class="modal-overlay" v-if="showQuestionModal">
       <div class="modal-content large-modal">
         <div class="modal-header">
-          <h3>管理题目 - {{ currentTest.title }}</h3>
+          <h3>管理题目 - {{ currentTest.title || '未知测试' }}</h3>
           <button class="close-btn" @click="closeQuestionModal">&times;</button>
         </div>
         <div class="modal-body">
           <!-- 题目列表 -->
-          <div class="question-list">
+          <div class="question-list" v-if="currentQuestions.length > 0">
             <div
               class="question-item"
               v-for="(question, index) in currentQuestions"
@@ -169,7 +169,7 @@
               <div class="question-header">
                 <span class="question-number">题目 {{ index + 1 }}</span>
                 <span class="question-type">{{ questionTypeLabels[question.question_type] }}</span>
-                <span class="question-points">{{ question.points }} 分</span>
+                <span class="question-points">{{ question.points || 1 }} 分</span>
                 <div class="question-actions">
                   <button class="btn-icon" @click="editQuestion(question)">
                     <i class="fas fa-edit"></i>
@@ -182,22 +182,28 @@
               <div class="question-content">
                 <p>{{ question.question_text }}</p>
               </div>
-              <!-- 显示选择题选项 -->
+              <!-- 显示选择题选项：适配option_a~option_d字段 -->
               <div
                 class="question-options"
-                v-if="['single_choice', 'multiple_choice', 'true_false'].includes(question.question_type)"
+                v-if="['single_choice', 'multiple_choice'].includes(question.question_type)"
               >
                 <div
                   class="option"
-                  v-for="(option, optIndex) in question.options"
+                  v-for="(option, optIndex) in formatQuestionOptions(question)"
                   :key="optIndex"
-                  :class="{ correct: option.correct }"
+                  :class="{ correct: isOptionCorrect(question, optIndex) }"
                 >
                   <span class="option-label">{{ String.fromCharCode(65 + optIndex) }}.</span>
-                  {{ option.text }}
+                  {{ option }}
                 </div>
               </div>
             </div>
+          </div>
+          <!-- 题目列表空状态 -->
+          <div class="empty-state" v-else>
+            <i class="fas fa-question-circle fa-2x"></i>
+            <h4>暂无题目</h4>
+            <p>点击"添加题目"按钮创建第一道题目</p>
           </div>
 
           <!-- 添加题目按钮 -->
@@ -239,7 +245,7 @@ export default {
       currentTest: {
         title: '',
         description: '',
-        duration: 60,
+        duration: 60, // 对应后端time_limit_min
         passing_score: 60,
         questions: []
       },
@@ -249,17 +255,14 @@ export default {
       showTestModal: false,
       showQuestionModal: false,
       showQuestionEditModal: false,
+      // 移除判断题、简答题，仅保留单选/多选（适配表结构）
       questionTypes: [
         { value: 'single_choice', label: '单选题' },
-        { value: 'multiple_choice', label: '多选题' },
-        { value: 'true_false', label: '判断题' },
-        { value: 'short_answer', label: '简答题' }
+        { value: 'multiple_choice', label: '多选题' }
       ],
       questionTypeLabels: {
         'single_choice': '单选题',
-        'multiple_choice': '多选题',
-        'true_false': '判断题',
-        'short_answer': '简答题'
+        'multiple_choice': '多选题'
       },
       testMode: 'list',
       currentTestId: null
@@ -273,31 +276,19 @@ export default {
       try {
         const response = await apiService.getQuizzes();
         if (response.success) {
-          this.tests = response.data.quizzes;
+          // 格式化测试数据，兼容后端字段
+          this.tests = response.data.quizzes.map(test => ({
+            ...test,
+            // 后端是time_limit_min，前端显示duration
+            duration: test.duration || test.time_limit_min || 60,
+            question_count: test.question_count || 0,
+            participants: test.participants || 0
+          }));
         }
       } catch (error) {
         console.error('加载测试失败:', error);
-        // 使用模拟数据
-        this.tests = [
-          {
-            id: 1,
-            title: 'Python基础知识测试',
-            description: '测试Python基础语法和概念的掌握程度',
-            question_count: 10,
-            duration: 30,
-            participants: 124,
-            passing_score: 60
-          },
-          {
-            id: 2,
-            title: 'HTML/CSS基础测试',
-            description: '测试HTML和CSS的基础知识',
-            question_count: 15,
-            duration: 45,
-            participants: 89,
-            passing_score: 60
-          }
-        ];
+        this.$message?.error('加载测试列表失败，请刷新重试');
+        this.tests = []; // 移除模拟数据，统一显示空状态
       }
     },
 
@@ -314,60 +305,119 @@ export default {
     },
 
     editTest(test) {
+      if (!test) return; // 防止test为undefined
       this.editingTest = test;
-      this.currentTest = { ...test };
+      // 兼容后端字段，赋值给currentTest
+      this.currentTest = {
+        ...test,
+        duration: test.duration || test.time_limit_min || 60
+      };
       this.showTestModal = true;
     },
 
     async saveTest() {
       try {
+        // 构造后端需要的参数（字段映射）
+        const testData = {
+          title: this.currentTest.title,
+          description: this.currentTest.description || '',
+          time_limit_min: this.currentTest.duration, // 前端duration对应后端time_limit_min
+          passing_score: this.currentTest.passing_score
+        };
+
         if (this.editingTest) {
-          // 更新测试
-          const response = await apiService.updateQuiz(this.currentTest.id, this.currentTest);
+          // 更新测试：携带id
+          const response = await apiService.updateQuiz(this.currentTest.id, {
+            id: this.currentTest.id,
+            ...testData
+          });
           if (response.success) {
             await this.loadTests();
+            this.$message?.success('测试更新成功');
           }
         } else {
           // 创建新测试
-          const response = await apiService.createQuiz(this.currentTest);
+          const response = await apiService.createQuiz(testData);
           if (response.success) {
             await this.loadTests();
+            this.$message?.success('测试创建成功');
           }
         }
         this.closeModal();
       } catch (error) {
         console.error('保存测试失败:', error);
-        this.$message?.error('保存测试失败');
+        this.$message?.error('保存测试失败，请重试');
       }
     },
 
-    // 修改：合并了两个重复的 startTest 方法
+    // 开始测试：增加test有效性校验
     startTest(test) {
+      if (!test || !test.id) {
+        this.$message?.warning('测试无效，无法开始');
+        return;
+      }
+      // 校验是否有题目
+      if (!test.question_count || test.question_count === 0) {
+        this.$message?.warning('该测试暂无题目，无法开始');
+        return;
+      }
       this.currentTestId = test.id;
       this.testMode = 'taking';
       this.$emit('start-test', test.id);
     },
 
-    // 修改：合并了两个重复的 viewResults 方法
+    // 查看结果：增加test有效性校验
     viewResults(test) {
+      if (!test || !test.id) {
+        this.$message?.warning('测试无效，无法查看结果');
+        return;
+      }
       this.currentTestId = test.id;
       this.testMode = 'results';
       this.$emit('view-results', test.id);
     },
 
     async manageQuestions(test) {
-      this.currentTest = test;
+      if (!test || !test.id) {
+        this.$message?.warning('测试无效，无法管理题目');
+        return;
+      }
+      this.currentTest = { ...test };
       try {
         const response = await apiService.getQuizQuestions(test.id);
         if (response.success) {
-          this.currentQuestions = response.data.questions;
-          this.showQuestionModal = true;
+          // 格式化题目数据：将option_a~option_d转为options数组
+          this.currentQuestions = response.data.questions.map(question => ({
+            ...question,
+            points: question.points || 1
+          }));
         }
+        this.showQuestionModal = true;
       } catch (error) {
         console.error('加载题目失败:', error);
+        this.$message?.error('加载题目失败，请重试');
         this.currentQuestions = [];
         this.showQuestionModal = true;
       }
+    },
+
+    // 格式化题目选项：将option_a~option_d转为数组
+    formatQuestionOptions(question) {
+      if (!question) return [];
+      return [
+        question.option_a || '',
+        question.option_b || '',
+        question.option_c || '',
+        question.option_d || ''
+      ];
+    },
+
+    // 判断选项是否为正确答案
+    isOptionCorrect(question, optIndex) {
+      if (!question || !question.correct_answer) return false;
+      const optionLabel = String.fromCharCode(65 + optIndex);
+      // 多选正确答案是逗号分隔，单选是单个字母
+      return question.correct_answer.includes(optionLabel);
     },
 
     showAddQuestionModal() {
@@ -376,50 +426,70 @@ export default {
     },
 
     editQuestion(question) {
+      if (!question) return;
       this.editingQuestion = { ...question };
       this.showQuestionEditModal = true;
     },
 
     async deleteQuestion(questionId) {
-      if (confirm('确定删除这个题目吗？')) {
-        try {
-          await apiService.deleteQuestion(questionId);
-          this.currentQuestions = this.currentQuestions.filter(q => q.id !== questionId);
-        } catch (error) {
-          console.error('删除题目失败:', error);
-          this.$message?.error('删除题目失败');
-        }
+      if (!questionId) return;
+      if (!confirm('确定删除这个题目吗？删除后无法恢复')) {
+        return;
+      }
+      try {
+        await apiService.deleteQuestion(questionId);
+        this.currentQuestions = this.currentQuestions.filter(q => q.id !== questionId);
+        this.$message?.success('题目删除成功');
+      } catch (error) {
+        console.error('删除题目失败:', error);
+        this.$message?.error('删除题目失败，请重试');
       }
     },
 
     async saveQuestion(question) {
+      if (!question || !this.currentTest.id) {
+        this.$message?.warning('题目或测试信息无效，无法保存');
+        return;
+      }
       try {
+        // 构造题目数据：适配option_a~option_d字段
         const data = {
-          ...question,
-          quiz_id: this.currentTest.id
+          quiz_id: this.currentTest.id,
+          question_text: question.question_text,
+          question_type: question.question_type,
+          option_a: question.option_a || '',
+          option_b: question.option_b || '',
+          option_c: question.option_c || '',
+          option_d: question.option_d || '',
+          correct_answer: question.correct_answer || '',
+          points: question.points || 1,
+          order_index: question.order_index || 0
         };
 
         if (question.id) {
           // 更新题目
+          data.id = question.id;
           const response = await apiService.updateQuestion(question.id, data);
           if (response.success) {
             const index = this.currentQuestions.findIndex(q => q.id === question.id);
             if (index !== -1) {
               this.currentQuestions.splice(index, 1, response.data.question);
             }
+            this.$message?.success('题目更新成功');
           }
         } else {
           // 添加新题目
           const response = await apiService.createQuestion(data);
           if (response.success) {
             this.currentQuestions.push(response.data.question);
+            this.$message?.success('题目添加成功');
           }
         }
 
         this.closeQuestionEditModal();
       } catch (error) {
         console.error('保存题目失败:', error);
-        this.$message?.error('保存题目失败');
+        this.$message?.error('保存题目失败，请重试');
       }
     },
 
@@ -443,13 +513,14 @@ export default {
     
     handleTestSubmitted(result) {
       this.testMode = 'list';
+      this.currentTestId = null; // 重置testId
       this.$emit('explore-module', 'online-testing');
-      this.$message?.success('测试提交成功！得分：' + result.score);
+      this.$message?.success(`测试提交成功！得分：${result.score || 0}`);
     },
     
     backToList() {
       this.testMode = 'list';
-      this.currentTestId = null;
+      this.currentTestId = null; // 重置testId
     }
   }
 };
