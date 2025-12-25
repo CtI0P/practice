@@ -965,33 +965,51 @@ router.get('/quizzes/:id', async (req, res) => {
 // ========== 创建新测试 ==========
 router.post('/quizzes', async (req, res) => {
   try {
-    const { course_id, title, description, time_limit_min, passing_score } = req.body;
-    
-    // 参数校验
-    if (!course_id || !title || !time_limit_min || !passing_score) {
+    console.log('后端收到的创建测试参数：', req.body);
+    const { title, description, time_limit_min, passing_score } = req.body;
+
+    // 1. 先查询 courses 表的所有有效 id
+    const [courses] = await pool.execute('SELECT id FROM courses');
+    if (courses.length === 0) {
       return res.status(400).json({
         success: false,
-        message: '课程ID、标题、时间限制和及格分数是必填项'
+        message: '暂无有效课程，请先创建课程'
       });
     }
-    
+
+    // 2. 随机选一个 course_id
+    const randomCourseId = courses[Math.floor(Math.random() * courses.length)].id;
+    console.log('随机选中的 course_id：', randomCourseId);
+
+    // 3. 校验必填项（无需前端传 course_id）
+    if (title === undefined || title === '') {
+      return res.status(400).json({
+        success: false,
+        message: '测试标题是必填项'
+      });
+    }
+
+    // 4. 插入数据（使用随机有效 course_id）
+    const defaultDescription = description || '';
+    const defaultTimeLimit = time_limit_min === undefined ? 0 : time_limit_min;
+    const defaultPassingScore = passing_score === undefined ? 60 : passing_score;
+
     const [result] = await pool.execute(
       'INSERT INTO quizzes (course_id, title, description, time_limit_min, passing_score) VALUES (?, ?, ?, ?, ?)',
-      [course_id, title, description || '', time_limit_min, passing_score]
+      [randomCourseId, title, defaultDescription, defaultTimeLimit, defaultPassingScore]
     );
-    
-    // 获取新创建的测试
+
     const [newQuiz] = await pool.execute(
       'SELECT * FROM quizzes WHERE id = ?',
       [result.insertId]
     );
-    
+
     return res.status(201).json({
       success: true,
       data: newQuiz[0],
       message: '测试创建成功'
     });
-    
+
   } catch (error) {
     console.error('创建测试失败:', error.message);
     return res.status(500).json({
