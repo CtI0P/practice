@@ -1023,20 +1023,46 @@ router.post('/quizzes', async (req, res) => {
 // ========== 更新测试 ==========
 router.put('/quizzes/:id', async (req, res) => {
   try {
-    const quizId = req.params.id;
+    // 1. 获取参数并转换 quizId 类型
+    const quizId = Number(req.params.id); // 转为数字类型
     const { course_id, title, description, time_limit_min, passing_score } = req.body;
     
-    // 参数校验
-    if (!course_id || !title || !time_limit_min || !passing_score) {
+    //  仅校验必填项（title）+ 有效 quizId 
+    if (isNaN(quizId) || quizId <= 0) {
       return res.status(400).json({
         success: false,
-        message: '课程ID、标题、时间限制和及格分数是必填项'
+        message: '无效的测试ID（必须是有效数字）'
       });
     }
-    
+    if (!title || title.trim() === '') { // 仅校验标题非空（去除首尾空格）
+      return res.status(400).json({
+        success: false,
+        message: '测试标题不能为空'
+      });
+    }
+
+    // 先查询测试是否存在（避免无效更新）
+    const [existingQuiz] = await pool.execute(
+      'SELECT * FROM quizzes WHERE id = ?',
+      [quizId]
+    );
+    if (existingQuiz.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '未找到该测试'
+      });
+    }
+
+    // 参数兜底（沿用原有值，前端不传则不修改）
+    const finalCourseId = course_id !== undefined ? course_id : existingQuiz[0].course_id;
+    const finalDescription = description !== undefined ? description : existingQuiz[0].description;
+    const finalTimeLimit = time_limit_min !== undefined ? time_limit_min : existingQuiz[0].time_limit_min;
+    const finalPassingScore = passing_score !== undefined ? passing_score : existingQuiz[0].passing_score;
+
+    // 2. 执行更新操作
     const [result] = await pool.execute(
       'UPDATE quizzes SET course_id = ?, title = ?, description = ?, time_limit_min = ?, passing_score = ? WHERE id = ?',
-      [course_id, title, description || '', time_limit_min, passing_score, quizId]
+      [finalCourseId, title, finalDescription, finalTimeLimit, finalPassingScore, quizId]
     );
     
     if (result.affectedRows === 0) {
