@@ -14,7 +14,12 @@ app.use(bodyParser.urlencoded({ extended: true })); // 解析URL编码请求体
 // 导入路由
 const apiRoutes = require('./src/routes/api');
 app.use('/api', apiRoutes);
+app.use('/api/lessons', require('./src/routes/lesson'));
 
+const uploadRoutes = require('./src/routes/upload');
+
+app.use('/api/upload', uploadRoutes);
+app.use('/uploads', express.static('uploads'));
 
 // 启动前检查数据库连接
 const startServer = async () => {
