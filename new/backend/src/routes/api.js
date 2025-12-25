@@ -1144,4 +1144,129 @@ router.get('/quizzes/:id/questions', async (req, res) => {
   }
 });
 
+// 提交测试接口 - POST /api/quizzes/submit
+// ========== 提交测试 ==========
+router.post('/quizzes/submit', async (req, res) => {
+  try {
+    // 获取前端提交的数据
+    const { quiz_id, answers, time_spent } = req.body;
+    // 测试阶段：手动指定用户ID（替换为你的实际测试用户ID，比如 1，后续上线替换为 req.user.id）
+    const userId = 1; 
+
+    // 1. 验证必填参数
+    if (!quiz_id || !Array.isArray(answers)) {
+      return res.status(400).json({
+        success: false,
+        message: '参数错误：缺少测试ID或答题数据'
+      });
+    }
+
+    // 2. 查询该测试的所有题目及正确答案（和你获取测试详情的SQL保持一致，只取需要的字段）
+    const [questions] = await pool.query(
+      `SELECT 
+        id,
+        correct_answer,
+        question_type,
+        points
+       FROM questions 
+       WHERE quiz_id = ?
+       ORDER BY order_index ASC`,
+      [quiz_id]
+    );
+
+    if (questions.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '该测试不存在或无题目'
+      });
+    }
+
+    // 3. 批改答案计算总分
+    let totalScore = 0;
+    // 构建题目ID映射表，方便快速查找
+    const questionMap = new Map(questions.map(q => [q.id, q]));
+
+    answers.forEach(userAnswer => {
+      // 兜底：跳过无效答题数据
+      if (!userAnswer || !userAnswer.question_id) return;
+      
+      const question = questionMap.get(userAnswer.question_id);
+      if (!question) return; // 跳过不存在的题目
+
+      const { correct_answer, question_type, points } = question;
+      const userAns = userAnswer.answer;
+
+      // console.log(`
+      //   题目ID：${userAnswer.question_id}
+      //   题目类型：${question_type}
+      //   数据库正确答案：${correct_answer}
+      //   用户提交答案：${JSON.stringify(userAns)}
+      //   用户答案第一个元素：${userAns[0]}
+      // `);
+
+      // 兜底：防止用户答案为空，导致访问 [0] 报错
+      if (!userAns || (Array.isArray(userAns) && userAns.length === 0)) return;
+
+      // 按题型对比答案
+      let isCorrect = false;
+      switch (question_type) {
+        case 'single_choice':
+        case 'true_false':
+          // 单选/判断：直接对比字符串
+          isCorrect = userAns[0] === correct_answer;
+          break;
+        case 'multiple_choice':
+          // 多选：排序后对比（避免["A","B"]和["B","A"]判定为错误）
+          const userAnsSorted = Array.isArray(userAns) ? userAns.sort().join(',') : '';
+          const correctAnsSorted = correct_answer.split(',').sort().join(',');
+          isCorrect = userAnsSorted === correctAnsSorted;
+          break;
+        case 'short_answer':
+          // 简答：精确匹配（可按需改为模糊匹配）
+          isCorrect = userAns[0] === correct_answer;
+          break;
+        default:
+          isCorrect = false;
+      }
+
+      // 正确则加分
+      if (isCorrect) {
+        totalScore += points || 0;
+      }
+    });
+
+    // 4. 存储/更新测试结果（INSERT ... ON DUPLICATE KEY UPDATE：存在则更新，不存在则新增）
+    await pool.execute(
+      `INSERT INTO quiz_results (user_id, quiz_id, score, submitted_at)
+       VALUES (?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE
+       score = ?,
+       submitted_at = NOW()`,
+      [userId, quiz_id, totalScore, totalScore] // 后一个 totalScore 对应更新的 score
+    );
+
+    // 5. 格式化返回数据（和你获取测试详情的返回格式保持一致）
+    return res.json({
+      success: true,
+      message: '测试提交成功',
+      data: {
+        result: {
+          score: totalScore,
+          quiz_id: quiz_id,
+          submitted_at: new Date().toLocaleString('zh-CN'), // 和你获取详情的时间格式一致
+          time_spent: time_spent || 0
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('提交测试失败:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: '提交测试失败',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
