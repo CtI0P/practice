@@ -493,32 +493,50 @@ router.get('/courses/:id', async (req, res) => {
 // ========== 新增课程 ==========
 router.post('/courses', async (req, res) => {
   try {
-    const { title, description, instructor_id, category, price, status, cover_image } = req.body;
+    const { title, category, description } = req.body;
 
-    // 参数校验
-    if (!title || !instructor_id || !category) {
+    // ✅ 最基本校验（和你前端一致）
+    if (!title || !category) {
       return res.status(400).json({
         success: false,
-        message: '课程标题、讲师ID、分类为必填项'
+        message: '课程名称和分类为必填项'
       });
     }
 
-    const [result] = await pool.execute(`
-      INSERT INTO courses (title, description, instructor_id, category, price, status, cover_image)
+    // ✅ 临时方案：写死 instructor_id
+    // ⚠️ 后期可以替换为 req.user.id
+    const instructor_id = 1;
+
+    const [result] = await pool.execute(
+      `
+      INSERT INTO courses
+        (title, description, instructor_id, category, price, status, cover_image)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [title, description || '', instructor_id, category, price || 0.00, status || 'draft', cover_image || '']);
+      `,
+      [
+        title,
+        description || '',
+        instructor_id,
+        category,
+        0.00,          // price
+        'draft',       // status
+        ''              // cover_image
+      ]
+    );
 
-    // 获取新增课程
-    const [newCourse] = await pool.execute('SELECT * FROM courses WHERE id = ?', [result.insertId]);
+    const [newCourse] = await pool.execute(
+      'SELECT * FROM courses WHERE id = ?',
+      [result.insertId]
+    );
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       data: { course: newCourse[0] },
       message: '课程创建成功'
     });
   } catch (error) {
     console.error('新增课程失败:', error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: '新增课程失败',
       error: error.message
@@ -526,25 +544,38 @@ router.post('/courses', async (req, res) => {
   }
 });
 
+
 // ========== 编辑课程 ==========
 router.put('/courses/:id', async (req, res) => {
   try {
     const courseId = req.params.id;
-    const { title, description, instructor_id, category, price, status, cover_image } = req.body;
+    const { title, description, category, level } = req.body;
 
-    // 参数校验
-    if (!title || !instructor_id || !category) {
+    // 基本校验
+    if (!title || !category) {
       return res.status(400).json({
         success: false,
-        message: '课程标题、讲师ID、分类为必填项'
+        message: '课程标题、分类为必填项'
       });
     }
 
-    const [result] = await pool.execute(`
-      UPDATE courses 
-      SET title = ?, description = ?, instructor_id = ?, category = ?, price = ?, status = ?, cover_image = ?, updated_at = NOW()
+    const [result] = await pool.execute(
+      `
+      UPDATE courses
+      SET
+        title = ?,
+        category = ?,
+        description = ?,
+        updated_at = NOW()
       WHERE id = ?
-    `, [title, description || '', instructor_id, category, price || 0.00, status || 'draft', cover_image || '', courseId]);
+      `,
+      [
+        title,
+        category,
+        description || '',
+        courseId
+      ]
+    );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
@@ -553,14 +584,17 @@ router.put('/courses/:id', async (req, res) => {
       });
     }
 
-    // 获取更新后的课程
-    const [updatedCourse] = await pool.execute('SELECT * FROM courses WHERE id = ?', [courseId]);
+    const [rows] = await pool.execute(
+      'SELECT * FROM courses WHERE id = ?',
+      [courseId]
+    );
 
     return res.json({
       success: true,
-      data: { course: updatedCourse[0] },
+      data: { course: rows[0] },
       message: '课程编辑成功'
     });
+
   } catch (error) {
     console.error('编辑课程失败:', error);
     return res.status(500).json({
@@ -570,6 +604,7 @@ router.put('/courses/:id', async (req, res) => {
     });
   }
 });
+
 
 // ========== 删除课程 ==========
 router.delete('/courses/:id', async (req, res) => {
@@ -599,6 +634,39 @@ router.delete('/courses/:id', async (req, res) => {
     });
   }
 });
+
+// ========== 发布课程 ==========
+router.post('/courses/:id/publish', async (req, res) => {
+  const courseId = req.params.id;
+
+  const [result] = await pool.execute(
+    `UPDATE courses SET status = 'published' WHERE id = ?`,
+    [courseId]
+  );
+
+  if (result.affectedRows === 0) {
+    return res.status(404).json({ success: false, message: '课程不存在' });
+  }
+
+  res.json({ success: true, message: '课程已发布' });
+});
+
+// ========== 下线课程 ==========
+router.post('/courses/:id/offline', async (req, res) => {
+  const courseId = req.params.id;
+
+  const [result] = await pool.execute(
+    `UPDATE courses SET status = 'archived' WHERE id = ?`,
+    [courseId]
+  );
+
+  if (result.affectedRows === 0) {
+    return res.status(404).json({ success: false, message: '课程不存在' });
+  }
+
+  res.json({ success: true, message: '课程已下线' });
+});
+
 
 // ========== 管理课程内容（课时） ==========
 router.get('/courses/:id/lessons', async (req, res) => {

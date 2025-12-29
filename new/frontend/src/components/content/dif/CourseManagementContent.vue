@@ -41,6 +41,22 @@
               <button class="action-btn small" @click="$emit('manage-content', course.id)" title="管理内容">
                 <i class="fas fa-cog"></i>
               </button>
+              <button
+                class="action-btn small success"
+                v-if="course.status !== 'published'"
+                @click="$emit('publish-course', course.id)"
+              >
+                发布
+              </button>
+              
+              <button
+                class="action-btn small danger"
+                v-if="course.status === 'published'"
+                @click="$emit('offline-course', course.id)"
+              >
+                下线
+              </button>
+
             </div>
           </div>
         </div>

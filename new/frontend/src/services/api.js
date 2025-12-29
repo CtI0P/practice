@@ -117,7 +117,7 @@ export const apiService = {
   },
   
   // 新增课程
-  async addCourse(courseData) {
+  async createCourse(courseData) {
     return api.post('/courses', courseData);
   },
   
@@ -130,7 +130,15 @@ export const apiService = {
   async deleteCourse(courseId) {
     return api.delete(`/courses/${courseId}`);
   },
+
+  async publishCourse(id) {
+    return api.post(`/courses/${id}/publish`);
+  },
   
+  async offlineCourse(id) {
+    return api.post(`/courses/${id}/offline`);
+  },
+
   // 获取课程下的课时列表
   async getCourseLessons(courseId) {
     return api.get(`/courses/${courseId}/lessons`);

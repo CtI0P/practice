@@ -73,7 +73,10 @@
           @edit-course="editCourse"
           @view-course="viewCourse"
           @manage-content="manageCourseContent"
+          @publish-course="publishCourse"
+          @offline-course="offlineCourse"
         />
+
         <!-- 课程加载中占位 -->
         <div v-if="loadingCourses && activeMenuItem === 'course-management'" class="loading-placeholder">
           <p>正在加载课程数据...</p>
@@ -122,7 +125,17 @@
       :quick-links="quickLinks"
       @quick-link-clicked="navigateToQuickLink"
     />
+
+    <CourseModal
+  :visible="showCourseModal"
+  :course="editingCourse"
+  @close="showCourseModal = false"
+  @submit="submitCourse"
+  />
   </div>
+
+  
+
 </template>
 
 <script>
@@ -137,6 +150,7 @@ import RightSidebar from './dif/RightSidebar.vue';
 import CommunityInteraction from './small/CommunityInteraction.vue';
 import OnlineTesting from './small/OnlineTesting.vue';
 import CourseLessons from './dif/CourseLessons.vue';
+import CourseModal from './dif/CourseModal.vue';
 
 export default {
   name: 'ContentArea',
@@ -150,7 +164,8 @@ export default {
     RightSidebar,
     CommunityInteraction,
     OnlineTesting,
-    CourseLessons
+    CourseLessons,
+    CourseModal
   },
   props: {
     activeMenuItem: { type: String, default: 'dashboard' },
@@ -179,6 +194,9 @@ export default {
       // 加载状态
       loading: false,
       loadingUsers: false,
+
+      showCourseModal: false,
+      editingCourse: null,
       
       // 页面标题和描述映射
       pageTitles: {
@@ -477,17 +495,12 @@ export default {
     },
     
     // 编辑课程
-    async editCourse(courseId) {
-      try {
-        const res = await apiService.getCourseDetail(courseId);
-        if (res.success) {
-          this.$emit('edit-course', res.data.course);
-        }
-      } catch (err) {
-        console.error(err);
-        this.$message?.error('获取课程信息失败');
-      }
+    editCourse(courseId) {
+      const course = this.courseList.find(c => c.id === courseId);
+      this.editingCourse = course;
+      this.showCourseModal = true;
     },
+
     
     // 查看课程
     async viewCourse(courseId) {
@@ -504,6 +517,22 @@ export default {
         this.$message?.error('获取课程信息失败');
       }
     },
+
+    async submitCourse(form) {
+      try {
+        if (this.editingCourse) {
+          await apiService.updateCourse(this.editingCourse.id, form);
+          this.$message?.success('课程更新成功');
+        } else {
+          await apiService.createCourse(form);
+          this.$message?.success('课程创建成功');
+        }
+        this.showCourseModal = false;
+        await this.fetchCourses();
+      } catch (err) {
+        this.$message?.error('操作失败');
+      }
+    },
     
     // 管理课程内容（课时）
     async manageCourseContent(courseId) {
@@ -518,6 +547,19 @@ export default {
       }
     },
 
+    async publishCourse(courseId) {
+      await apiService.publishCourse(courseId);
+      this.$message?.success('课程已发布');
+      this.fetchCourses();
+    },
+    
+    async offlineCourse(courseId) {
+      await apiService.offlineCourse(courseId);
+      this.$message?.success('课程已下线');
+      this.fetchCourses();
+    },
+
+
     // ====================== 通用事件转发方法 ======================
     navigateToCard(cardId) {
       this.$emit('card-clicked', cardId);
@@ -526,10 +568,9 @@ export default {
       this.$emit('card-action', data);
     },
     handlePageAction(actionId) {
-      this.$emit('page-action', actionId);
-      // 课程管理页面的"创建课程"按钮触发
       if (actionId === 'add-course') {
-        this.$emit('open-add-course-modal');
+        this.editingCourse = null;
+        this.showCourseModal = true;
       }
     },
     navigateToQuickLink(linkId) {
