@@ -10,7 +10,6 @@ const validateNumber = (value, defaultValue = 1, min = 1) => {
 // ========== 核心：分页获取用户列表（适配前端用户管理组件） ==========
 router.get('/users', async (req, res) => {
   try {
-    console.log("nhao");
     // 1. 获取并校验分页参数（和前端分页按钮联动）
     const currentPage = validateNumber(req.query.page, 1, 1); // 当前页，默认1
     const pageSize = validateNumber(req.query.limit, 10, 1); // 每页条数，默认10
@@ -21,29 +20,32 @@ router.get('/users', async (req, res) => {
     const totalUsers = totalRows[0].count || 0;
     const totalPages = Math.ceil(totalUsers / pageSize); // 总页数
 
-    // 3. 查询分页用户数据（严格匹配数据库字段，适配前端展示）
-    const [userRows] = await pool.execute(
+    // 3. 查询分页用户数据（修复：补充缺失的日期、状态字段，使用动态分页参数）
+    const [userRows] = await pool.query(
       `SELECT 
         id, 
         username, 
         email, 
         full_name, 
         role, 
-        avatar_url
+        avatar_url,
+        is_active,   
+        created_at,     
+        updated_at       
        FROM users 
        ORDER BY created_at DESC 
-       LIMIT 5 OFFSET 0`
-      // [offset]
+       LIMIT ? OFFSET ?`, 
+      [pageSize, offset]  // 传入分页参数
     );
 
-    // 4. 格式化数据（适配前端组件）
+    // 4. 格式化数据（适配前端组件，修复字段映射错误）
     const userList = userRows.map(user => ({
       ...user,
-      // 统一 status 格式：数据库 is_active 是布尔值，转为前端的 'active'/'inactive'
-      status: user.status ? 'active' : 'inactive',
-      // 格式化时间（前端友好显示）
-      joinDate: new Date(user.joinDate).toLocaleDateString('zh-CN'),
-      lastLogin: new Date(user.lastLogin).toLocaleString('zh-CN'),
+      // 用is_active（数据库字段）替代status
+      status: user.is_active ? 'active' : 'inactive',
+      // 用created_at/updated_at生成日期，且做空值判断
+      joinDate: user.created_at ? new Date(user.created_at).toLocaleDateString('zh-CN') : '未记录',
+      lastLogin: user.updated_at ? new Date(user.updated_at).toLocaleString('zh-CN') : '未登录',
       // 补全前端需要的字段（如果数据库中为 null）
       full_name: user.full_name || '未设置',
       avatar_url: user.avatar_url || ''
