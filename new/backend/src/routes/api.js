@@ -38,7 +38,7 @@ router.get('/users', async (req, res) => {
       [pageSize, offset]  // 传入分页参数
     );
 
-    // 4. 格式化数据（适配前端组件，修复字段映射错误）
+    // 4. 格式化数据
     const userList = userRows.map(user => ({
       ...user,
       // 用is_active（数据库字段）替代status
@@ -73,7 +73,6 @@ router.get('/users', async (req, res) => {
   }
 });
 
-// ========== 修复现有接口的字段错误 ==========
 // 1. 获取单个用户（修复 last_login、status 字段）
 router.get('/users/:id', async (req, res) => {
   try {
@@ -183,7 +182,6 @@ router.put('/users/:id', async (req, res) => {
   }
 });
 
-// ========== 保留原有接口（注册/登录/删除） ==========
 // 注册新用户（修正密码字段名）
 router.post('/submit', async (req, res) => {
   try {
@@ -852,7 +850,7 @@ router.post('/posts/:postId/comments', async (req, res) => {
   }
 });
 
-// ========== 获取测试/测验列表 ==========
+// 获取测试/测验列表
 router.get('/quizzes', async (req, res) => {
   try {
     console.log("获取测试列表请求:", req.query);
@@ -948,7 +946,7 @@ router.get('/quizzes', async (req, res) => {
   }
 });
 
-// ========== 获取单个测试详情 ==========
+// 获取单个测试详情
 router.get('/quizzes/:id', async (req, res) => {
   try {
     const quizId = req.params.id;
@@ -1032,7 +1030,7 @@ router.get('/quizzes/:id', async (req, res) => {
   }
 });
 
-// ========== 创建新测试 ==========
+// 创建新测试 
 router.post('/quizzes', async (req, res) => {
   try {
     console.log('后端收到的创建测试参数：', req.body);
@@ -1090,7 +1088,7 @@ router.post('/quizzes', async (req, res) => {
   }
 });
 
-// ========== 更新测试 ==========
+// 更新测试
 router.put('/quizzes/:id', async (req, res) => {
   try {
     // 1. 获取参数并转换 quizId 类型
@@ -1164,7 +1162,7 @@ router.put('/quizzes/:id', async (req, res) => {
   }
 });
 
-// ========== 删除测试 ==========
+// 删除测试 
 router.delete('/quizzes/:id', async (req, res) => {
   try {
     const quizId = req.params.id;
@@ -1196,12 +1194,12 @@ router.delete('/quizzes/:id', async (req, res) => {
   }
 });
 
-// ========== 获取测试问题 ==========
+// 获取测试问题
 router.get('/quizzes/:id/questions', async (req, res) => {
   try {
     const quizId = req.params.id;
     
-    // 修正SQL：删除不存在的created_at字段，同时保留你需要的有效字段
+    // 修正SQL：删除不存在的created_at字段，同时保留需要的有效字段
     const [questions] = await pool.execute(
       `SELECT 
         id,
@@ -1258,7 +1256,7 @@ router.get('/quizzes/:id/questions', async (req, res) => {
   }
 });
 
-// ========== 提交测试 ==========
+// 提交测试
 router.post('/quizzes/submit', async (req, res) => {
   try {
     // 获取前端提交的数据
@@ -1382,6 +1380,7 @@ router.post('/quizzes/submit', async (req, res) => {
   }
 });
 
+// 创建题目
 router.post('/questions', async (req, res) => {
   try {
     const { quiz_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points, order_index } = req.body;
@@ -1418,6 +1417,7 @@ router.post('/questions', async (req, res) => {
   }
 });
 
+// 更新题目
 router.put('/questions/:id', async (req, res) => {
   try {
     const questionId = req.params.id;
