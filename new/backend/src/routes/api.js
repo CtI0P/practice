@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/database');
-// 新增：参数校验工具函数（解决 validateNumber is not defined 错误）
+const { authenticateToken,authorize }=require('../middleware/authMiddleware');
+const jwt=require('jsonwebtoken');
+const bcrypt=require('bcryptjs')
+const JWTService=require('../utils/jwt');
+const JWT_SECRET=process.env.JWT_SECRET;
+const JWT_EXPIRES_IN=process.env.JWT_EXPIRES_IN
+// 参数校验工具函数
 const validateNumber = (value, defaultValue = 1, min = 1) => {
   const num = parseInt(value);
   return isNaN(num) || num < min ? defaultValue : num;
@@ -73,6 +79,35 @@ router.get('/users', async (req, res) => {
   }
 });
 
+router.get('/users/profile', authenticateToken, async(req,res)=>{
+  try{
+    const userId=req.user.userId;
+
+    const [users]=await pool.execute(
+      'SELECT id, username, email, full_name, role, avatar_url FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if(users.length===0){
+      return res.stauts(404).json({
+        success:false,
+        message:'用户不存在',
+      });
+    }
+
+    return res.json({
+      success:true,
+      data:users[0]
+    });
+  }catch(error){
+    console.error('获取用户信息失败：',error);
+    return res.stauts(500).json({
+      success:false,
+      message:'获取用户信息失败'
+    });
+  }
+})
+
 // 1. 获取单个用户（修复 last_login、status 字段）
 router.get('/users/:id', async (req, res) => {
   try {
@@ -120,7 +155,16 @@ router.get('/users/:id', async (req, res) => {
 });
 
 // 2. 更新用户信息（修复 status 字段为 is_active）
-router.put('/users/:id', async (req, res) => {
+router.put('/users/:id', authenticateToken, async (req, res) => {
+  const requestUserId=parseInt(req.params.id);
+
+  if(req.user.role!=='admin' && req.user.userId!==requestUserId){
+    return res.status(403).json({
+      success:false,
+      message:'只能更新自己的信息'
+    })
+  }
+
   try {
     const { username, email, full_name, role, status } = req.body;
     
@@ -182,8 +226,65 @@ router.put('/users/:id', async (req, res) => {
   }
 });
 
+// 仅管理员可访问的路由
+router.get('/admin/users',authenticateToken,authorize('admin'),async(req,res)=>{
+  try{
+    const currentPage=validateNumber(req.query.page,1,1);
+    const pageSize=validateNumber(req.query.limit,10,1);
+    const offset=Math.max(0,(currentPage-1)*pageSize);
+
+    // 查询用户总数
+    const [totalRows]=await pool.execute('SELECT COUNT(*) as count FROM users');
+    const totalUsers=totalRows[0].count || 0;
+    const totalPages=Math.ceil(totalUsers/pageSize);
+
+    // 查询分页用户数据
+    const [userRows]=await pool.query(
+      `SELECT 
+        id, 
+        username, 
+        email, 
+        full_name, 
+        role, 
+        avatar_url,
+        is_active,
+        created_at,
+        updated_at
+       FROM users 
+       ORDER BY created_at DESC 
+       LIMIT ? OFFSET ?`, 
+      [pageSize, offset]
+    );
+
+    const userList=userRows.map(user=>({
+      ...user,
+      status:user.is_active ? 'active' : 'inactive',
+      joinDate:user.created_at ? new Date(user.created_at).toLocaleDateString('zh-CN'):'未记录',
+      last_login:user.updated_at ? new Date(user.updated_at).toLocaleDateString('zh-CN'):'未登录',
+    }));
+
+    return res.json({
+      success:true,
+      data:{
+        userList,
+        totalUsers,
+        currentPage,
+        totalPages
+      },
+      message:'获取用户列表成功'
+    });
+  }catch(error){
+    console.error('查询用户列表失败：',error.message);
+    return res.status(500).json({
+      success:false,
+      message:'查询用户列表失败',
+      error:error.message
+    })
+  }
+})
+
 // 注册新用户（修正密码字段名）
-router.post('/submit', async (req, res) => {
+router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
@@ -229,21 +330,40 @@ router.post('/submit', async (req, res) => {
       }
     }
 
-    // 修正：使用 password_hash 字段存储密码
+    // 插入加密后的密码
     const [result] = await pool.execute(
-      'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
-      [username, email, password] // 实际项目应加密存储
+      'INSERT INTO users (username, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?)',
+      [username, email, password, 'user', true] // 默认角色为user，状态为active
     );
     
-    // 获取新用户（不返回密码）
-    const [newUser] = await pool.execute(
+     // 获取新用户数据
+    const [newUserRows] = await pool.execute(
       'SELECT id, username, email, full_name, role, avatar_url, created_at FROM users WHERE id = ?',
       [result.insertId]
     );
 
+    if (newUserRows.length === 0) {
+      throw new Error('用户创建后无法获取用户数据');
+    }
+
+    const newUser = newUserRows[0];
+
+    // 生成JWT令牌
+    const token=JWTService.generateToken({
+      userId:newUser.id,
+      username:newUser.username,
+      email:newUser.email,
+      role:newUser.role || 'user'
+    });
+
+    const { password_hash, ...userWithoutPassword } = newUser;
+
     return res.status(201).json({
       success: true,
-      data: newUser[0],
+      data:{
+        user:userWithoutPassword,
+        token
+      },
       message: '注册成功'
     });
     
@@ -308,8 +428,18 @@ router.post('/login', async (req, res) => {
       [user.id]
     );
 
+    // 生成JWT令牌
+    const tokenPayload={
+      userId:user.id,
+      username:user.username,
+      email:user.email,
+      role:user.role || 'user'
+    }
+
     // 生成 token
-    const token = `token_${user.id}_${Date.now()}`;
+    const token = jwt.sign(tokenPayload,JWT_SECRET,{
+      expiresIn:JWT_EXPIRES_IN
+    })
 
     // 返回安全数据（不含密码）
     const { password_hash: _, ...userWithoutPassword } = user;
@@ -333,7 +463,7 @@ router.post('/login', async (req, res) => {
 });
 
 // 删除用户（修正路径）
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', authenticateToken, authorize('admin') , async (req, res) => {
   try {
     const [result] = await pool.execute(
       'DELETE FROM users WHERE id = ?',

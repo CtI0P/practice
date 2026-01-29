@@ -48,16 +48,30 @@ api.interceptors.response.use(
 
 // API方法
 export const apiService = {
+  async register(data){
+    const response=await api.post('/register',data);
+    return response.data;
+  },
+
   // 用户注册
   async registerUser(data) {
-    return api.post('/submit', data); // 注意：后端注册接口是 /submit
+    return api.post('/register', data);
   },
 
   // 用户登录
   async loginUser(data) {
-    return api.post('/login', data);
+    const response = await api.post('/login', data);
+
+    // 保存token和用户信息
+    if(response.success && response.data.token){
+      localStorage.setItem('token',response.data.token);
+      localStorage.setItem('user',JSON.stringify(response.data.user));
+    }
+
+    return response;
   },
-  
+
+
   // 获取所有用户（带分页）
   async getUsers(page = 1, limit = 10) {
     return api.get('/users', {
@@ -82,7 +96,7 @@ export const apiService = {
 
   // 提交表单数据
   async submitForm(data) {
-    return api.post('/submit', data);
+    return api.post('/register', data);
   },
   
   // 获取所有提交
@@ -258,7 +272,9 @@ export const apiService = {
       console.error('获取测试结果失败:', error);
       throw error;
     }
-  }
+  },
+
+  
 };
 
 export default apiService;

@@ -1,0 +1,1379 @@
+Redis数据结构
+    ---基本类型---
+    String       hello world
+    Hash         {name:"qwe",age:11}
+    List         [A->B->C->D]
+    Set          {A,B,C}
+    SortedSet    {A:1,B:2,C:3}
+    ---特殊类型---
+    GEO          {A:(123.3,30.5)}
+    BitMap       0110110101
+    HyperLog     0110110101
+
+Redis通用命令
+    通用命令是部分数据类型，都可以使用的指令，常见的有：
+        KEYS：查看符合模板的所有key，不建议在生产环境设备上使用
+        DEL：删除一个指定的key
+        EXISTS：判断key是否存在
+        EXPIRE：给一个key设置有效期，有效期到期时该key会被自动删除
+        TTL：查看一个KEY的剩余有效期
+    help [command]可以查看一个命令的具体用法，例如：help keys
+
+String类型的常见命令（String类型的三种格式：字符串、int、float）：
+    SET：添加或者修改已存在的一个String类型的键值对
+    GET：根据key获取String类型的value
+    MSET：批量添加多个String类型的键值对
+    MGET：根据多个key获取多个String类型的value
+    INCR：让一个整形的key自增1
+    INCRBY：让一个整形的key自增并指定步长，例如：incrby num 2 让num值自增2
+    INCRBUFLOAT：让一个浮点类型的数字自增并指定步长
+    SETNX：添加一个String类型的键值对，前提是这个key不存在，否则不执行
+    SETEX：添加一个String类型的键值对，并且指定有效期
+
+key的结构
+    Redis的key允许有多个单词形成层级结构，多个单词之间用':'隔开，格式为：
+        项目名:业务名:类型:id
+    这个格式并非固定，也可以根据自己的需求来删除或添加词条
+    例如项目名叫test，有user何product两种不同类型的数据，我们可以这样定义key：
+        user相关的key：test:uset:1
+        product相关的key：test:product:1
+        eg：set test:user:1 '{"id":1,"name":"qwe","age":123}'
+
+Hash类型常见命令[hash是一个string类型的field(字段)和value(值)的映射表，hash特别适合存储对象]：
+    HSET key field value：添加或者修改hash类型key的field的值
+    HGET key field：获取一个hash类型key的field的值
+    HMSET：批量添加多个hash类型key的field值
+    HMGET：批量获取多个hash类型key的field值
+    HGETALL：获取一个hash类型的key中的所有field和value
+    HKEYS：获取一个hash类型的key中的所有的field
+    HVALS：获取一个hash类型的key中的所有的value
+    HINCRBY：让一个hash类型的key的字段值自增并指定步长
+    HSETNX：添加一个hash类型的key的field值，前提是这个field不存在，否则不执行
+
+List类型
+    Redis中的list类型可以看作是一个双向链表结构。既可以支持正向检索也可以支持反向检索
+    特征：有序、元素可以重复、插入和删除快、查询速度一般
+list类型常见命令：
+    LPUSH key element ...：向列表左侧插入一个或多个元素
+    LPOP key：移除并返回列表左侧的第一个元素，没有则返回nil
+    RPUSH key element ...：向列表右侧插入一个或多个元素
+    RPOP key：移除并返回列表右侧的第一个元素
+    LRANGE key star end：返回一段角标范围内的所有元素
+    BLPOP和BRPOP：与LPOP和RPOP类似，只不过在没有元素时等待指定事件，而不是直接返回nil
+
+set类型：
+    set可以看作是一个value为null的HashMap
+    特征：无序、元素不可重复、查找快、支持交集、并集、差集等功能
+set类型常见命令
+    ---单集合操作
+    SADD key member ...：向set中添加一个或多个元素
+    SREM key member ...：移除set中的指定元素
+    SCARD key：返回set中元素的个数
+    SISMEMBER key member：判断一个元素是否存在于set中
+    SMEMBERS：获取set中的所有元素
+    ---多集合操作
+    SINTER key1 key2...：求key1与key2的交集
+    SDIFF key1 key2...：求key1与key2的差集
+    SUNION key1 key2...：求key1和key2的并集
+
+SortedSet类型
+    Redis的SortedSet是一个可排序的set集合。SortedSet中的每一个元素都带有一个score属性，客园基于score属性对元素排序，底层的实现是一个跳表（SkipList）加hash表
+    特征：可排序、元素不可重复、查询速度快
+常见命令
+    ZADD key score member：添加一个或多个元素到sorted set，如果已存在则更新其score值
+    ZREM key member：删除sorted set中的一个指定元素
+    ZSCORE key member：获取sorted set中的指定元素的score值
+    ZRANK key member：获取sorted set中的指定元素的排名
+    ZCARD key：获取sorted set中的元素个数
+    ZCOUNT key min max：统计score值在给定范围内的所有元素的个数
+    ZINCRBY key increment member：让sorted set中的指定元素自增，指定为步长increment
+    ZRANGE key min max：按照score排序后，获取指定排名范围内的元素
+    ZRANGEBYSCORE key min max：按照score排序后，获取指定score范围内的元素
+    ZDIFF、ZINTER、ZUNION：求差集、交集、并集
+    注意：所有的排名默认都是升序，如果要降序则在命令Z后面添加REV即可 eg：ZREVRANK
+
+Redis持久化
+    RDB持久化
+        RDB持久化 Redis Backup file，Redis数据备份文件，也叫做Redis数据快照
+        就是把内存中的所有数据都记录到磁盘中。当Redis实例故障重启后，从磁盘读取快照文件，恢复数据
+        快照文件称为RDB文件，默认是保存在当前运行目录
+        Redis内部有触发RDB的机制，可以在redis.conf文件中找到，格式如下：
+            # 900秒内，如果至少有1个key被修改，则执行bgsave，如果是save "" 则表示禁用RDB
+            save 900 1
+            save 300 10
+            save 60 10000
+        RDB的其他配置也可以在redis.conf文件中设置：
+            # 是否压缩，建议不开启，压缩也会消耗cpu，磁盘的话不值钱
+            rdbcompression yes
+            # RDB文件名称
+            dbfilename dump.rdb
+            # 文件保存的路径目录
+            dir ./
+        bgsave开始时会fork主进程得到子进程，子进程共享主进程的内存数据。完成fork后读取内存数据并写入RDB文件
+        fork采用的是copy-on-write技术：
+            当主进程执行读操作时，访问共享内存
+            当主进程执行写操作时，则会拷贝一份数据，执行写操作
+        RDB的缺点：
+            RDB执行间隔时间长，两次RDB之间写入数据有丢失的风险
+            fork子进程、压缩、写出RDB文件都比较耗时
+    AOF持久化
+        AOF全称Append Only File(追加文件)。Redis处理的每一个写命令都会记录子啊AOF文件，可以看做是命令日志文件
+        AOF默认是关闭的，需要修改redis.conf配置文件来开启AOF：
+            #是否开启AOF功能，默认是no
+            appendonly yes
+            # AOF文件的名称
+            appendfilename "appendonly.aof"
+        AOF的命令记录的频率也可以通过redis.conf文件来配：
+            # 表示每执行一次写命令，立即记录到AOF文件
+            appendfsync always
+            # 写命令执行完先放入AOF缓冲区，然后表示每隔1秒将缓冲区数据写到AOF文件，是默认方案
+            appendfsync everysec
+            # 写命令执行完先放入AOF缓冲区，由操作系统决定何时将缓冲区内容协会磁盘
+            appendfsync no
+        配置项          刷盘时机                优点                缺点
+        always          同步刷盘        可靠性高，几乎不丢数据      性能影响大
+        everysec        每秒刷盘                性能适中          最多丢失1秒数据
+        no            操作系统控制              性能最好      可靠性较差，可能丢失大量数据
+        因为是记录命令，AOF文件会比RDB文件大的多。而且AOF会记录对同一个key的多次写操作，但只有最后一次写操作才有意义
+        通过执行bgrewriteaof命令，可以让AOF文件执行重写功能，用最少的命令达到相同效果
+        Redis也会在触发阈值时自动去重写AOF文件。阈值也可以在redis.conf中配置：
+            # AOF文件比上次文件增长超过多少百分比则触发重写
+            auto-aof-rewrite-percentage 100
+            # AOF文件体积最小多大以上才触发重写
+            auto-aof-rewrite-min-size 64mb
+                                RDB                                         AOF
+    持久化方式          定时对整个内存做快照                        记录每一次执行的命令
+    数据完整性          不完整，两次备份之间会丢失                  相对完整，取决于刷盘策略
+    文件大小            会有压缩，文件体积小                        记录命令，文件体积很大
+    宕机恢复速度                很快                                        慢
+    数据恢复优先级      低，因为数据完整性不如AOF                   高，因为数据完整性更高
+    系统资源占用        高，大量CPU和内存消耗                       低，主要是磁盘IO资源，但AOF重写时会占用大量CPU和内存资源
+    使用场景        可以容忍数分钟的数据丢失，追求更快的启动速度     对数据安全性要求较高常见
+
+Redis主从
+    搭建主从架构
+        单节点Redis的并发能力是有上限的，要进一步提高Redis的并发能力，就需要搭建主从集群，实现读写分离
+            结构：
+                主机------>RedisClient，RedisClient--写操作-->master，RedisClient--读操作-->slave，RedisClient--读操作-->slave
+        步骤：分别开启多个实例，再开启主从关系
+            eg：
+                现在三个实例还没有任何关系，要配置主从可以使用replicaof或者slaveof(5.0)命令
+                有临时和永久两种模式：
+                    修改配置文件（永久生效）
+                        在redis.conf添加一行配置：slaveof <masterip> <masterport>
+                    使用redis-cli客户端连接到redis服务器，执行slaveof命令（重启后失效）：
+                        slaveof <masterip> <masterport>
+        注意：在5.0后新增命令replicaof，与salveof效果一致
+    主从数据同步原理
+        主从第一次同步是全量同步
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-21%20155250.png)
+        master如何判断slave是不是第一次同步数据？这里有两个很重要的概念：
+            Replication Id：简称replid，是数据集的标记，id一致则说明是同一数据集。每一个master都有唯一的replid，
+                            slave则会继承master节点的replid
+            offset：偏移量，随着记录在repl_baklog中的数据增多而逐渐增大。slave完成同步时也会记录当前同步的offset。
+                    如果slave的offset小于master的offset，说明slave数据落后于master，需要更新
+            因此slave做数据同步，必须向master声明自己的replication id和offset，master才可以判断到底需要同步哪些数据
+        主从第一次同步是全量同步，但如果slave重启后同步，则执行增量同步
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-21%20161733.png)
+            可以从以下几个方面来优化Redis主从集群：
+                在master中配置repl-diskless-sync yes启用无磁盘复制，避免全量同步时的磁盘IO
+                Redis单节点上的内存占用不要太大，减少RDB导致的过多磁盘IO
+                适当提高repl_baklog的大小，发现slave宕机时尽快实现故障恢复，尽可能避免全量同步
+                限制一个master上的slave节点数量，如果实在是太多slave，则可以采用主-从-从链式结构，减少master压力
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-21%20162141.png)
+
+Redis哨兵
+    哨兵的作用和原理
+        Redis提供了哨兵（Sentinel）机制来实现主从集群的自动故障恢复。哨兵的结构和作用如下：
+            监控：Sentinel会不断检查master和slave是否按预期工作
+            自动故障恢复：如果master故障，Sentinel会将一个slave提升为master。当故障实例恢复后也以新的master为主
+            通知：Sentinel充当Redis客户端的服务发现来源，当集群发生故障转移时，会将最新信息推送给Redis客户端
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-21%20163314.png)
+        服务状态监控
+            Sentinel基于心跳机制监测服务状态，每隔1秒向集群的每个实例发送ping命令：
+                主观下线：如果某sentinel节点发现某实例未在规定时间响应，则认为该实例主观下线
+                客观下线：若超过指定数量（quorum）的sentinel都认为该实例主观下线，则该实例客观下线，quorum值最好超过Sentinel实例数量的一半
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-21%20163907.png)
+        选举新的master
+            一旦发现master故障，sentinel需要在salve中选择一个作为新的master，选择依据是这样的：
+                首先会判断slave节点与master节点断开时间长短，如果超过指定值（down-after-milliseconds*10）则会排除该slave节点
+                软后判断slave节点的slave-priority值，越小优先级越高，如果是0则永不参与选举
+                如果slave-priority一样，则判断slave节点的offset值，越大说明数据越新，优先级越高
+                最后是判断slave节点的运行id大小，越小优先级越高
+        如何实现故障转移
+            当选中了其中一个slave为新的master后（例如slave1），故障转移的步骤如下：
+                sentinel给备选的slave1节点发送slaveof no one命令，让该节点成为master
+                sentinel给所有其他slave发送slaveof 192.168.150.101 7002命令，让这些slave成为新master的从节点，开始从新的master上同步数据
+                最后，sentinel将故障节点标记为slave，当故障节点恢复后会自动成为新的master的slave节点
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-21%20164636.png)
+    搭建哨兵集群
+    RedisTemplate的哨兵模式
+
+Redis分片集群
+    主从和哨兵可以解决高可用、高并发读的问题。但是依然有两个问题没有解决：
+        海量数据存储问题
+        高并发写的问题
+    使用分片集群可以解决上述问题，分片集群特征：
+        集群中有多个master，每个master保存不同数据
+        每个master都可以有多个slave节点
+        master之间通过ping监测彼此健康状态
+        客户端请求可以访问集群任意节点，最终都会被转发到正确节点
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-21%20171114.png)
+    散列插槽
+        Redis会把一个master节点映射到0~16383共16384插槽（hash slot）上，查看集群信息时就能看到
+        数据key不是与节点绑定，而是与插槽绑定。redis会根据key的有效部分计算插槽值，分两种情况：
+            key中包含"{}"，且"{}"中至少包含1个字符，"{}"中的部分是有效部分
+            key中不包含"{}"，整个key都是有效部分
+        例如：key是num，那么就根据num计算，如果是{itcast}num，则根据itcast计算。计算方式是利用CRC16算法得到一个hash值
+              然后对16384取余，得到的结果就是slot值
+    集群伸缩
+    故障转移
+        当集群中有一个master宕机会发生什么：
+            1.首先是该实例与其他实例失去连接
+            2.然后是疑似宕机
+            3.最后是确定下线，自动提升一个slave为新的master
+
+Lua
+    数据类型
+        数据类型                        描述
+        nil                 这个最简单，只有值nil属于该类，表示一个无效值（在条件表达式中相当于false）
+        boolean             包含两个值：false和true
+        number              表示双精度类型的实浮点数
+        String              字符串由一对双引号或单引号来表示
+        function            由C或Lua编写的函数
+        table               Lua中的表(table)其实是一个"关联数组"(associative arrays)，数组的索引可以是数字、字符串或表类型
+                            在Lua中，table的创建是通过"构造表达式"来完成的，最简单的构造表达式是{}，用来创建一个空表                        
+    变量
+        lua声明变量的时候，并不需要指定数据类型：
+            --声明字符串
+            local str='hello'
+            --声明数字
+            local num=21
+            --声明布尔类型
+            local flag=true
+            --声明数组 key为索引的table
+            local arr={'java','python','lua'}
+            --声明table，类似java的map
+            local map={name='java',age=21}
+        访问table：
+            --访问数组，lua数组的角标从1开始
+            print(arr[1])
+            --访问table
+            print(map['name'])
+            print(map.name)
+    循环
+        数组、table都可以利用for循环来遍历
+            遍历数组：
+                ---声明数组 key为索引的table
+                local arr={'java','python','lua'}
+                --遍历数组
+                for index,value in ipairs(arr) do
+                    print(index,value)
+                end
+            遍历table
+                --声明map，也就是table
+                local map={name='jack',age=21}
+                --遍历table
+                for key,value in pairs(map) do
+                    print(key,value)
+                end
+    函数
+        定义函数的语法：
+            function 函数名(argument1,argument2,...,argumentn)
+                --函数体
+                return 返回值
+            end
+            例如：
+                function printArr(arr)
+                    for index,value in ipairs(arr) do
+                        print(value)
+                    end
+                end
+    条件控制
+        例如if、else语法：
+            if(布尔表达式)
+            then
+                --[布尔表达式为true时执行该语句块--]
+            else
+                --[布尔表达式为false时执行该语句块--]
+            end
+    布尔表达式中的逻辑运算操作符：and、or、not
+
+多级缓存
+    用户--->浏览器客户端缓存--->nginx，nginx优先查询redis，若Redis缓存未命中则查询tomcat，进程缓存未命中则查询数据库
+
+冷启动与缓存预热
+    冷启动：服务刚刚启动时，Redis中并没有缓存，如果所有商品数据都在第一次添加缓存，可能给数据库带来较大压力
+    缓存预热：在实际开发中，我们可以利用大数据统计用户访问的热点数据，在项目启动时将这些热点数据提前查询并保存到Redis中
+
+缓存同步策略
+    缓存数据同步的常见方式有三种：
+        设置有效期：给缓存设置有效期，到期后自动删除。再次查询时更新
+            优势：简单、方便
+            缺点：时效性差，缓存过期之前可能不一致
+            场景：更新频率较低，时效性要求低的业务
+        同步双写：在修改数据库的同时，直接修改缓存
+            优势：时效性强，缓存与数据库强一致
+            缺点：有代码入侵，耦合度高
+            场景：对一致性、时效性要求较高的缓存数据
+        异步通知：修改数据库时发送时间通知，相关服务监听到通知后修改缓存数据
+            优势：低耦合，可以同时通知多个缓存服务
+            缺点：时效性一般，可能存在中间不一致状态
+            场景：时效性要求一般，有多个服务需要同步
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-22%20154608.png)
+
+优雅的key结构
+    Redis的key虽然可以自定义，但最好遵循下面几个实践约定：
+        遵循基本格式：[业务名称]:[数据名]:[id]
+        长度不超过44字节
+        不包含特殊字符        
+    例如：登录业务保存用户信息，key：login:user:10
+        优点：
+            可读性强
+            避免key冲突
+            方便管理
+            更节省内存：key是string类型，底层编码包含int、embstr和raw三种。embstr在小于44字节使用，采用连续内存空间，内存占用更小
+
+BigKey
+    BigKey通常以key的大小和key中的成员数量来综合判定，例如：
+        key本身的数据量过大：一个string类型的key，它的值为5mb
+        key中的成员数过多：一个ZSET类型的key，它的成员数量为10000个
+        key中成员的数据量过大：一个hash类型的key，它的成员数量虽然只有1000个但这些成员的value值总大小为100mb
+    推荐值：
+        单个key的value小于10kb
+        对于集合类型的key，建议元素数量小于1000
+    危害：
+        网络阻塞：对bigkey执行读请求时，少量的QPS就可能导致带宽使用率被占满，导致redis实例，乃至所在物理机变慢
+        数据倾斜：bigkey所在的redis实例内存使用率远超其他实例，无法使数据分片的内存资源达到均衡
+        redis阻塞：对元素较多的hash、list、zset等做运算会耗时较久，使主线程被阻塞
+        cpu压力：对bigkey的数据序列化和反序列化会导致cpu的使用率飙升，影响redis实例和本机其它应用
+    如何发现：
+        redis-cli --bigkeys
+            利用redis-cli 提供的--bigkeys参数，可以遍历分析所有key，并返回key的整体统计信息与每个数据的top1的bingkey
+        scan扫描
+            自己编程，利用scan扫描redis中的所有key，利用strlen、hlen等命令判断key长度
+        第三方工具
+            利用第三方工具，如Redis-Rdb-Tools分析RDB快照文件，全面分析内存使用情况
+        网络监控
+            自定义工具，监控进出redis的网路数据，超出预警值时主动告警
+
+批处理优化
+    Pipeline
+        单个命令的执行流程
+            一次命令的响应时间=1次往返的网络传输耗时+1次redis执行命令耗时
+        N条命令依次执行
+            N次命令的响应时间=N次往返的网络传输耗时+N次redis执行命令耗时
+        N条命令批量执行
+            N次命令的响应时间=1次往返的网络传输耗时+N次redis执行命令耗时
+    集群下的批处理
+        如MSET或Pipeline这样的批处理需要在一次请求中携带多条命令，而此时如果redis是一个集群，那批处理命令的多个key必须落在一个插槽中，否则会导致执行失败
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-22%20174035.png)
+
+服务端优化
+    持久化配置
+        redis的持久化虽然可以保证数据安全，但也会带来很多的额外开销，应遵循以下建议：
+            ①用来做缓存的redis实例尽量不要开启持久化功能
+            ②建议关闭RDB持久化功能，使用AOF持久化
+            ③利用脚本定期在slave节点做RDB，实现数据备份
+            ④设置合理的rewrite阈值，避免频繁的bgrewrite
+            ⑤配置no-appendfsync-on-rewrite = yes，禁止在rewrite期间做aof，避免因aof引起的阻塞
+        部署相关建议：
+            ①redis实例的物理机要预留足够内存，应对fork和rewrite
+            ②单个redis实例内存上限不要太大，例如4G或8G。可以加快fork的速度、减少主从同步、数据迁移压力
+            ③不要与CPU密集型应用部署在一起
+            ④不要与高硬盘负载应用一起部署。例如：数据库、消息队列    
+    慢查询
+        慢查询：在redis执行时耗时超过某个阈值的命令，成为慢查询
+        慢查询的阈值可以通过配置指定：
+            slowlog-log-than：慢查询阈值，默认是10000，建议1000
+        慢查询会被放入日志中，日志的长度有限，可以通过配置指定：
+            slowlog-max-len：慢查询日志（本质是一个队列）的长度，默认是128，建议1000
+        查看慢查询日志列表：
+            slowlog len：查询慢查询日志长度
+            slowlog get[n]：读取n条慢查询日志
+            slowlog reset：清空慢查询列表
+
+Redis底层原理
+    数据结构
+        动态字符串SDS
+            简单动态字符串(Simple Dynamic String)，具备动态扩容能力
+                struct __attribute__((__packed__))sdshdr8{
+                    uint8_t len; // buf已保存的字符串字节数，不包含结束标识
+                    uint8_t alloc; // buf申请的总的字节数，不包含结束标识
+                    unsigned char flags; // 不同SDS的头类型，用来控制SDS的头大小
+                    char buf[];
+                }
+            假如要给SDS追加一段字符串，这里首先会申请新内存空间：
+                如果新字符串小于1M，则新空间为扩展后字符串长度的两倍+1
+                如果新字符串大于1M，则新空间为扩展后字符串长度+1M+1.称为内容预分配
+                eg：
+                    原字符串为 hi   其结构为：len:2 alloc:2  flag:1 h i \0
+                    追加字符串 ,Amy 其结构为：len:6 alloc:12 flag:1 h i , A m y \0
+            优点：
+                ①获取字符串长度的时间复杂度为o(1)
+                ②支持动态扩容
+                ③减少内存分配次数
+                ④二进制安全
+        IntSet
+            IntSet是Redis中set集合的一种实现方式，基于整数数组来实现，并且具备长度可变、有序等特征
+            特点：
+                ①Redis会确保intset中的元素唯一、有序
+                ②具备类型升级机制，可以节省内存空间
+                ③底层采用二分查找方式来查询
+            结构为：
+                typedef struct intset{
+                    uint32_t encoding; // 编码方式，支持存放16位、32位、64位整数
+                    uint32_t length; // 元素个数
+                    int8_t contents[]; // 整数数组，保存集合数据
+                }intset;
+            其中的encoding包含三种模式，表示存储的整数大小不同：
+                #define INTSET_ENC_INT16(sizeof(int16_t)) // 2字节整数，类似于short
+                #define INTSET_ENC_INT32(sizeof(int32_t)) // 4字节整数，类似于int
+                #define INTSET_ENC_INT64(sizeof(int64_t)) // 8字节整数，类似于long
+            为了方便寻找，Redis会将intset中所有的整数按照升序依次保存在contents数组中，结构如图：
+                encoding:INTSET_ENC_INT16 length:3 5 10 20
+                (encoding:INTSET_ENC_INT16和length组成header)(5 10 20 则是int16_t contents[])
+                5的起始地址为0x001  10的起始地址为0x003  20的起始地址为0x005  eg：20到起始地址间隔了两个元素 0x005=0x001+2*2
+                寻址公式：startPtr*(sizeof(int16)*index)
+            现在，数组中每个数字都在int16_t的范围内，因此采用的编码方式是INTSET_ENC_INT16，每部分占用的字节大小为：
+                encoding：4字节
+                length：4字节
+                contents：2字节*3=6字节
+            IntSet升级：
+                流程如下：
+                    ①升级编码为INTSET_ENC_INT32，每个整数占4字节，并按照新的编码方式及元素个数扩容数组
+                    ②倒叙一次将数组中的元素拷贝到扩容后的正确位置
+                    ③将待添加的元素放入数组末尾
+                    ④最后，将intset的encoding属性改为INTSET_ENC_INT32，将length属性改为4
+                        encoding:INTSET_ENC_INT32 length:4 5 10 20 50000
+        Dict
+            Redis是一个键值型数据库，可以根据键实现快速的增删改查，而键与值的映射关系正是通过Dict实现的
+            Dict由三部分组成，分别是：哈希表(DictHashTable)、哈希节点(DictEntry)、字典(Dict)
+                typedef struct dichEntry{
+                    void *key; // 键
+                    union{
+                        void *val;
+                        uint64_t u64;
+                        int64_t s64;
+                        double d;
+                    }v; // 值
+                    // 下一个Entry的指针
+                    struct dictEntry *next;
+                }dictEntry;
+                typedef struct dictht{
+                    // entry数组
+                    // 数组中保存的是指向entry的指针
+                    dictEntry **table;
+                    // 哈希表大小
+                    unsigned long size;
+                    // 哈希表大小的掩码，总等于size-1
+                    unsigned long sizemask;
+                    // entry个数
+                    unsigned long user;
+                }dictht;
+                typedef struct dict{
+                    dictType *type; // dict类型，内置不同的hash函数
+                    void *privdate; // 私有数据，在做特殊hash运算时用
+                    dictht ht[2]; // 一个Dict包含两个哈希表，其中一个是当前数据，另一个一般是空，rehash时使用
+                    long rehashidx; // rehash的进度，-1表示未进行
+                    int16_t pauserehash; // rehash是否暂停，1则暂停，0则继续
+                }dict;
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20140300.png)        
+
+
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20140953.png)
+        Dict的扩容
+            Dict中的HashTable就是数组结合单向链表的实现，当集合中元素较多时，必然导致哈希冲突增多，链表过长，查询效率会降低
+            Dict在每次新增键值对时都会检查负载因子(LoadFactor=userd/size)，满足以下两种情况时会触发哈希表扩容：
+                哈希表的LoadFactor>=1，并且服务器没有执行bgsave或bgrewriteaof等后台进程
+                哈希表的LoadFactor>5
+                    static int _dictExpandIfNeeded(dict *d){
+                        // 如果正在rehash，则返回ok
+                        if(dictIsRehashing(d))return DICT_OK;
+                        // 如果哈希表为空，则初始化哈希表为默认大小：4
+                        if(d->ht[0].size==0)return dictExpand(d,DICT_HT_INITIAL_SIZE);
+                        // 当负载因子(used/size)达到1以上，并且当前没有进行bgrewrite等子进程操作
+                        // 或者负载因子超过5，进行dictExpand，也就是扩容
+                        if(d->ht[0].used>=d->ht[0].size && 
+                            (dict_can_resize || d->ht[0].used/d->ht[0].size>dict_force_resize_ratio)){
+                                // 扩容大小为used+1，底层会对扩容大小做判断，实际上找的是第一个大于等于used+1的2^n
+                                return dictExpand(d,d->ht[0].used+1);
+                        }
+                        return DICT_OK;
+                    }
+        Dict的收缩
+            Dict除了扩容以外，每次删除元素时，会对负载因子做检查，当LoadFactor<0.1时，会做哈希表收缩
+                //t_hash.c #hashTypeDeleted()
+                ...
+                if(dictDelete((dict *)o->ptr,field)==C_OK){
+                    deleted=1;
+                    // 删除成功后，检查是否需要重置Dict大小，如果需要则调用dictResize重置
+                    // Always check if the dictionary needs a resize after a delete
+                    if(htNeedsResize(o->ptr))dictReszie(o->ptr);
+                }
+                ...
+                //server.c文件
+                int htNeedsResize(dict *dict){
+                    long long size,used;
+                    // 哈希表大小
+                    size=dictSlots(dict);
+                    // entry数量
+                    used=dictSize(dict);
+                    // size>4 (哈希表初始大小)并且负载因子低于0.1
+                    return (size>DICT_HT_INITIAL_SIZE && (used*100/size<HASHTABLE_MIN_FILL));
+                }
+                int dictResize(dict *d){
+                    unsigned long minimal;
+                    // 如果正在做bgsave或bgrewriteaof或rehash，则返回错误
+                    if(!dict_can_resize || dictIsRehashing(d))
+                        return DICT_ERR;
+                    // 获取used，也是entry个数
+                    minimal=d->ht[0].used;
+                    if(minimal<DICT_HT_INITIAL_SIZE)
+                        minimal=DICT_HT_INITIAL_SIZE;
+                    // 重置大小为minimal，其实是第一个大于等于minimal的2^n
+                    return dictExpand(d,minimal);
+                }
+        Dict的rehash
+            不管是扩容还是收缩，必定会创建新的哈希表，导致哈希表的size和sizemask变化，而key的查询与sizemask有关。
+            因此必须对哈希表中的key重新计算索引，插入新的哈希表，这个过程称为rehash。过程如下：
+                ①计算新的hash表的realeSize，值取决于当前要做的是扩容话说收缩：
+                    如果是扩容，则新size为第一个大于等于dict.ht[0].used+1的2^n
+                    如果是收缩，则新size为第一个大于等于dict.ht[0].usze的2^n(不得小于4)
+                ②按照新的realeSize申请内存空间，创建dictht，并复制给dict.ht[1]
+                ③设置dict.rehashidx=0，标示开始rehash
+                ④将dict.ht[0]中的每一个dictEntry都rehash到dict.ht[1]
+                ⑤将dict.ht[1]复制给dict.ht[0]，给dict.ht[1]初始化为空哈希表，释放原来的dict.ht[0]内存
+            Dict的rehash并不是一次性完成的，如果Dict中包含数百万的entry，要在一次rehash完成，既有可能导致主线程阻塞。
+            因此Dict的rehash是分多次、渐进式的完成，因此称渐进式rehash，流程如下：
+                ①计算新的hash表的realeSize，值取决于当前要做的是扩容话说收缩：
+                    如果是扩容，则新size为第一个大于等于dict.ht[0].used+1的2^n
+                    如果是收缩，则新size为第一个大于等于dict.ht[0].usze的2^n(不得小于4)
+                ②按照新的realeSize申请内存空间，创建dictht，并复制给dict.ht[1]
+                ③设置dict.rehashidx=0，标示开始rehash
+                × ④将dict.ht[0]中的每一个dictEntry都rehash到dict.ht[1] ×
+                ④每次执行新增、查询、修改、删除操作时，都检查一下dict.rehashidx是否大于-1，如果是则将dict.ht[0].table[rehashidx]的entry
+                链表rehash到dict.ht[1]，并且将rehashidx++。直至dict.ht[0]的所有数据都rehash到dict.ht[1]
+                ⑤将dict.ht[1]复制给dict.ht[0]，给dict.ht[1]初始化为空哈希表，释放原来的dict.ht[0]内存
+                ⑥将rehash赋值为-1，代表rehash结束
+                ⑦在rehash过程中，新增操作，则直接写入ht[1]，查询、修改和删除则会在dict.ht[0]和dict.ht[1]依次查找并执行。这样可以确保ht[0]
+                的数据只增不减，随着rehash最终为空
+        ZipList
+            (ZipList中所有存储长度的数值均采用小段字节序,即低位字节在前，高位字节在后。例如:数值0x1234,采用小段字节序后实际存储值为:0x3412)
+            ZipList是一种特殊的“双端链表”，由一系列特殊编码的连续内存块组成，可以在任意一端进行压入/弹出操作，并且该操作的时间复杂度为O(1)
+            zlbytes(总字节数)  zltail(尾偏移量,尾节点与起始地址之间的字节数)  zllen(entry节点数)  entry(head节点)  entry ... entry(tail节点)  zlend(结束标示:0xff)
+                zlbytes     uint32_t    4字节       记录整个压缩列表占用的内存字节数
+                zltail      uint32_t    4字节       记录压缩到列表表尾节点距离压缩列表的起始地址由多少字节，通过这个偏移量，可以确定表尾节点的地址
+                zllen       uint16_t    2字节       记录了压缩列表包含的节点数量，最大值为UINT16_MAX(65534)，如果超过这个值，此处会记录为65535，但节点的真实数量需要遍历整个压缩列表才能计算得出
+                entry       列表节点    不定        压缩列表包含的各个节点，节点的长度由节点保存的内容决定
+                zlend       uint8_t     1字节       特殊值0xFF(十进制255)，用于标记压缩列表的末端
+        ZipListEntry
+            ZipList中的entry并不像普通链表那样记录前后节点的指针，因为记录两个指针要占用16字节，浪费内存。而是采用下面结构：
+                previous_entry_length   encoding    content
+            previous_entry_length：前一节点的长度，占1个或5个字节
+                如果前一节点的长度小于254字节，则采用1个字节来保存这个长度值
+                如果前一节点的长度大于254字节，则采用5个字节来保存这个长度值，第一个字节为0xfe,后四个节点才是真实长度数据
+            encoding：编码属性，记录content的数据类型(字符串还是整数)以及长度，占用1个、2个或5个字节
+            content：负责保存节点的数据，可以是字符串或整数
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20154517.png)
+
+
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20154945.png)
+        ZipList的连锁更新问题
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20155306.png)
+        QuickList
+            问题1：ZipList虽然节省内存，但申请内存必须是连续空间，如果内存占用较多，申请占用较多，申请内存效率低，怎么办？
+            √ 限制ZipList的长度和entry大小
+            问题2：但是要存储大量数据，超出ZipList最佳上限该怎么办？
+            √ 可以创建多个ZipList来分片存储数据
+            问题3：数据拆分后比较分散，不方便管理和查找，这多个ZipList如何建立联系？
+            √ Redis在3.2版本引入了新的数据结构QuickList，它是一个双端链表，链表中的每个节点都是一个ZipList
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20160313.png)
+            为了避免QuickList中的每个ZipList中entry过多，Redis提供了一个配置项：list-ziplist=size来限制
+                如果值为正，则代表ZipList的允许的entry个数的最大值
+                如果值为负，则代表ZipList的最大内存大小，分5中情况：
+                    ①-1：每个ZipList的内存占用不能超过4kb
+                    ②-2：每个ZipList的内存占用不能超过8kb
+                    ①-3：每个ZipList的内存占用不能超过16kb
+                    ②-4：每个ZipList的内存占用不能超过32kb
+                    ①-5：每个ZipList的内存占用不能超过64kb
+                其默认值为-2：
+                    127.0.0.1:6379> config get list-max-ziplist-size
+                    1) "list-max-ziplist-size"
+                    2) "-2"
+            除了控制ziplist的大小，quicklist还可以对节点的ziplist做压缩，通过配置项list-compress-depth来控制。因为链表
+            一般都是从首尾访问较多，所以首尾是不压缩的。这个参数是控制首尾不压缩的节点个数：
+                0：特殊值，代表不压缩
+                1：表示QuickList的首尾各有1个节点不压缩，中间节点压缩
+                2：表示QuickList的首尾各有2个节点不压缩，中间节点压缩
+                以此类推
+                默认值：
+                    127.0.0.1:6379> config get list-compress-depth
+                    1) "list-compress-depth"
+                    2) "0"
+                typedef struct quicklist{
+                    // 头节点指针
+                    quicklistNode *head;
+                    // 尾节点指针
+                    quicklistNode *tail;
+                    // 所有ziplist的entry的数量
+                    unsigned long count;
+                    // ziplists总数量
+                    unsigned long len;
+                    // ziplist的entry上限，默认值-2
+                    int fill : QL_FILL_BITS;
+                    // 首尾不压缩的节点数量
+                    unsigned int compress : QL_COMP_BITS;
+                    // 内存重分配时的书签数量及数组，一般用不到
+                    unsigned int bookmark_count : QL_BM_BITS;
+                    quicklistBookmark bookmarks[];
+                }quicklist;
+                typedef struct quicklistNode{
+                    // 前一个节点指针
+                    struct quicklistNode *prev;
+                    // 下一个节点指针
+                    struct quicklistNode *next;
+                    // 当前节点的ziplist指针
+                    unsigned char *zl;
+                    // 当前节点的ziplist的字节大小
+                    unsigned int sz;
+                    // 当前节点的ziplist的entry个数
+                    unsigned int count : 16;
+                    // 编码方式：1，ziplist：2 lzf压缩模式
+                    unsigned int encoding : 2;
+                    // 数据容器类型（预留）：1，其它：2，ziplist
+                    unsigned int container：2;
+                    // 是否被解压缩。1：则说明被解压了，将来要重新压缩
+                    unsigned int recompress :1;
+                    unsigned int attempted_compress : 1; // 测试用
+                    unsigned int extra : 10; // 预留字段
+                }quicklistNode;
+        SkipList
+            SkipList(跳表)首先就是链表，但与传统链表相比由几点差异：
+                元素按照升序排列存储
+                节点可能包含多个指针，指针跨度不同
+                    // t_zset.c
+                    typedef struct zkiplist{
+                        // 头尾指针
+                        struct zskiplistNode *header,*tail;
+                        // 节点数量
+                        unsigned long length;
+                        // 最大的索引层级，默认是1
+                        int level;
+                    }zskiplist;
+                    // t_zset.c
+                    typedef struct zskiplistNode{
+                        sds ele; // 节点存储的值
+                        double score; //节点分数，排序、查找用
+                        struct zskiplistNode *backward; // 前一个节点指针
+                        struct zkiplistlevel{
+                            struct zskiplistNode *forward; //下一个节点指针
+                            unsigned long span; // 索引跨度
+                        }level[]; // 多级索引数组
+                    }zskiplistNode;
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20164033.png)
+        RedisObject
+            Redis中的任意数据类型的键和值都会被封装为一个RedisObject，也叫做Redis对象，源码如下：
+                typedef struct RedisObject{
+                    unsigned type:4;
+                    unsigned encoding:4;
+                    unsigned lru:LRU_BITS; // LRU_BITS为24
+                    int refcount;
+                    void *ptr;
+                }robj;
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20164619.png)
+            Redis中会根据存储的数据类型不同，选择不同的编码方式，共包含11种不同类型：
+                0       OBJ_ENCODING_RAW                raw编码动态字符串
+                1       OBJ_ENCODING_INT                long类型的整数的字符串
+                2       OBJ_ENCODING_HT                 hash表(字典dict)
+                3       OBJ_ENCODING_ZIPMAP             已废弃
+                4       OBJ_ENCODING_LINKDLIST          双端链表
+                5       OBJ_ENCODING_ZIPLIST            压缩列表
+                6       OBJ_ENCODING_INTSET             整数集合
+                7       OBJ_ENCODING_SKIPLIST           跳表
+                8       OBJ_ENCODING_EMBSTR             embstr的动态字符串
+                9       OBJ_ENCODING_QUICKLIST          快速列表
+                10      OBJ_ENCODING_STREAM             Stream流
+            每种数据类型的使用编码方式如下：
+                OBJ_STRING          int、embstr、raw
+                OBJ_LIST            LinkedList和Ziplist(3.2以前)、QuickList(3.2以后)
+                OBJ_SET             intset、HT
+                OBJ_ZSET            ZipList、HT、SkipList
+                OBJ_HASH            ZipList、HT
+        五种数据结构
+            String
+                string是Redis中最常见的数据存储类型：
+                    其最基本编码方式是RAW，基于简单动态字符串SDS实现，存储上限为512mb
+                    如果存储的SDS长度小于44字节，则会采用EMBSTR编码，此时object head与SDS是一段连续空间。申请内存时只需要条用一次内存分配函数，效率更高
+                    如果存储的字符串是整数值，并且大小在LONG_MAX范围内，则会采用INT编码：直接将数据保存在RedisObject的ptr指针位置(刚好8字节)，不再需要SDS了
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20170437.png)
+            List
+                List类型可以从首、尾操作列表中的元素
+            LinkedList：普通链表，可以从双端访问，内存占用较高，内存碎片较多
+            ZipList：压缩列表，可以从双端访问，内存占用低，存储上限低
+            QuickList：LinkedList+ZipList，可以从双端访问，内存占用较低，包含多个ZipList，存储上限高
+                在3.2版本之前，Redis采用ZipList和LinkedList来实现list，当元素数量小于512并且元素大小小于64字节时采用ZipList编码，超过则采用LinkedList编码
+                在3.2版本之后，Redis统一采用QuickList来实现List：
+                    // xx : push if key exists
+                    // c : 命令行字符串 根据空格分段，放入数组argv中
+                    void pushGenericCommand(client *c,int where,int xx){
+                        int j;
+                        //判断元素大小，不能超过LIST_MAX_ITEM_SIZE，LPUSH key v1 v2
+                        // argc 就是argv数组的大小
+                        for(j=2;j<c->argc;j++){
+                            if(sdslen(c->argv[j]->ptr)>LIST_MAX_ITEM_SIZE){
+                                addReplyError(c,"Element too large");
+                                return;
+                            }
+                        }
+                        // 尝试找到key对应的list
+                        robj *lobj=lookupKeyWrite(c->db,c->argv[1]);
+                        // 检查类型是否正确
+                        if(checkType(c,lobj,OBJ_LIST))return;
+                        // 检查是否为空
+                        if(!lobj){
+                            if(xx){
+                                addReply(c,shared.czero);
+                                return;
+                            }
+                            // 为空，则创建新的QuickList
+                            lobj=createQuicklistObject();
+                            quicklistSetOptions(lobj->ptr,server.list_max_ziplist_size,server.list_compress_depth);
+                            dbAdd(c->db,c->argv[1],lobj);
+                        }
+                        // 略...
+                    }
+                    robj *createQuicklistObject(void){
+                        // 申请内存并初始化QuickList
+                        quicklist *l=quicklistCreate();
+                        // 创建RedisObject，type为OBJ_LIST
+                        // ptr指向QuickList
+                        robj *o=createObject(OBJ_LIST,l);
+                        // 设置编码为QuickList
+                        o->encoding=OBJ_ENCODING_QUICKLIST;
+                        return o;
+                    }
+            Set是Redis中的单列集合，满足下列特点：
+                不保证有序性
+                保证元素唯一(可以判断元素是否存在)
+                求交集、并集、差集
+                为了查询效率和唯一性，set采用HT编码(Dict)。Dict中的key用来存储元素，value统一为null
+                当存储的所有数据都是整数，并且元素数量不超过set-max-intset-entries时，Set会采用IntSet编码，以节省内存
+                    robj *setTypeCreate(sds value){
+                        // 判断value是否是数值类型long long
+                        if(isSdsRepresentableAsLongLong(value,NULL)==C_OK){
+                            // 如果是数值类型，则采用IntSet编码
+                            return createIntsetObject();
+                        }
+                        // 判断采用默认编码，也就是HT
+                        return createSetObject();
+                    }
+                    robj *createIntsetObject(void){
+                        // 初始化INTSET并申请内存空间
+                        intset *is=intsetNew();
+                        // 创建RedisObject
+                        robj *o=createObject(OBJ_SET,is);
+                        // 指定编码为INTSET
+                        o->encoding=OBJ_ENCODING_INTSET;
+                        return o;
+                    }
+                    robj *createSetObject(void){
+                        // 初始化Dict类型，并申请内存
+                        dict *d=dictCreate(&setDictType,NULL);
+                        // 创建RedisObject
+                        robj *o=createObject(OBJ_SET,d);
+                        // 设置encoding为HT
+                        o->encoding=OBJ_ENCODING_HT;
+                        return o;
+                    }
+                    int setTypeAdd(robj *subject,sds value){
+                        long long llval;
+                        if(subject->encoding==OBJ_ENCODING_HT){
+                            // 已经是HT编码，直接添加元素
+                            dict *ht=subject->ptr;
+                            dictEntry *de=dictAddRaw(ht,value,NULL);
+                            if(de){
+                                dictSetKey(ht,de,sdsup(value));
+                                dictSetVal(ht,de,NULL);
+                                return 1;
+                            }
+                        }
+                        else if(subject->encoding==OBJ_ENCODING_INTSET){
+                            // 目前是INTSET
+                            // 判断value是否是整数
+                            if(isSdsRepresentableAsLongLong(value,&llval)==C_OK){
+                                uint8_t success=0;// 是整数，直接添加元素到set
+                                subject->ptr=intsetAdd(subject->ptr,llval,&success);
+                                if(success){
+                                    // 当intset元素数量超出set_max_intset_entries，则转为HT
+                                    size_t max_entries=server.set_max_intset_entries;
+                                    if(max_entries >= 1<<30)max_entries=1<<30;
+                                    if(intsetLen(subject->ptr) > max_entries)
+                                        setTypeConvert(subject,OBJ_ENCODING_HT);
+                                    return 1;
+                                }
+                            }
+                            else{ // 不是整数，直接转为HT
+                                setTypeConvert(subject,OBJ_ENCODING_HT);
+                                serverAssert(dictAdd(subject->ptr,sdsup(value),NULL)==DICT_OK);
+                                return 1;
+                            }
+                        }
+                        else{
+                            serverPanic("Unknown set encoding");
+                        }
+                    }
+            set-max-intset-entries默认是512
+            ZSet
+                ZSet也就是sortedset，其中每一个元素都需要指定一个score值和member值：
+                    可以根据score值排序后
+                    member必须唯一
+                    可以根据member查询分数
+                因此，zset底层数据结构必须满足键值存储、键必须唯一、可排序这几个需求
+                    SkipList：可以排序，并且可以同时存储score和ele值(member)
+                    HT(Dict)：可以键值存储，并且可以根据key找value
+                // zset结构
+                typedef struct zset{
+                    // Dict指针
+                    dict *dict;
+                    // SkipList指针
+                    zskiplist *zsl;
+                }zset;
+                robj *createZsetObject(void){
+                    zset *zs=zmalloc(sizeof(*zs));
+                    robj *o;
+                    // 创建Dict
+                    zs->dict=dictCreate(&zsetDictType,NULL);
+                    // 创建SkipList
+                    zs->zsl=zslCreate();
+                    o=createObject(OBJ_ZSET,zs);
+                    o->encoding=OBJ_ENCODING_SKIPLIST;
+                    return o;
+                }
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-23%20182525.png)
+                当元素数量不多时，HT和SkipList优势不明显，而且更耗内存，因此zset还会采用ZipList结构来节省内存，不过需要同时满足两个条件：
+                    ①元素数量小于zset_max_ziplist_entries  默认值128
+                    ②每个元素都小于zset_max_ziplist_value字节，默认值64
+                // zadd添加元素时，先根据key找到zset，不存在则创建新的zset
+                zobj=lookupKeyWrite(c->db,key);
+                if(checkType(c,zobj,OBJ_ZSET))goto cleanup;
+                // 判断是否存在
+                if(zobj==NULL){ // zset不存在 
+                    if(server.zset_max_ziplist_entries==0 || 
+                        server.zset_max_ziplist_value < sdslen(c->argv[scoreidx+1]->ptr)){
+                        // zset_max_ziplist_entries设置为0就是禁用了ZipList，
+                        // 或者value大小超过了zset_max_ziplist_value，采用HT+SkipList
+                        zobj=createZsetObject();
+                    }else{ // 否则，采用ZipList
+                        zobj=createZsetZiplistObject();
+                    }
+                    dbAdd(c->db,key,zobj);
+                }
+                // ....
+                zsetAdd(zobj,score,ele,flags,&retflags,&newscore);
+                robj *createZsetObject(void){
+                    // 申请内存 
+                    zset *zs=zmalloc(sizeof(*zs));
+                    robj *o;
+                    zs->dict=dictCreate(&zsetDictType,NULL);
+                    // 创建SkipList
+                    zs->zsl=zslCreate();
+                    o=createObject(OBJ_ZSET,zs);
+                    o->encoding=OBJ_ENCODING_SKIPLIST;
+                    return o;
+                }
+                robj *createZsetZiplistObject(void){
+                    // 创建Ziplist
+                    unsigned char *zl=ziplistNew();
+                    robj *o=createObject(OBJ_ZSET,zl);
+                    o->encoding=OBJ_ENCODING_ZIPLIST;
+                    return o;
+                }
+                int zsetAdd(robj *zobj,double score,sds ele,int in_flags,int *out_flags,double *newscore){
+                    // 判断编码方式
+                    if(zobj->encoding==OBJ_ENCODING_ZIPLIST){ // 是ZipList编码
+                        unsigned char *eptr;
+                        // 判断当前元素是否已经存在，已经存在则更新score即可
+                        if((eptr)=zzlFind(zobj->ptr,ele,&curscore)!=NULL){
+                            // ...略
+                            return 1;
+                        }else if(!xx){
+                            // 元素不存在，需要新增，则判断ziplist长度有没有超、元素大小有没有超
+                            if(zzlLength(zobj->ptr)+1 > server.zset_max_ziplist_value
+                                || sdslen(ele) > server.zset_max_ziplist_value
+                                || !ziplistSafeToAdd(zobj->ptr,sdslen(ele))){
+                                    // 如果超出，则需要转为SkipList编码
+                                    zsetConvert(zobj,OBJ_ENCODING_SKIPLIST);
+                                }else{
+                                    zobj->ptr=zzlInsert(zobj->ptr,ele,score);
+                                    if(newscore)*newscore=score;
+                                    *out_flags |= ZADD_OUT_ADDED;
+                                    return 1;
+                                }
+                        }else{
+                            *out_flags |= ZADD_OUT_NOP;
+                            return 1;
+                        }
+                    }
+                    // 本身就是SKIPLIST编码，无需转换
+                    if(zobj->encoding==OBJ_ENCODING_SKIPLIST){
+                        // ...略
+                    }else{
+                        serverPanic("Unknown sorted set encoding");
+                    }
+                    return 0; // Never reached
+                }
+                ziplist本身没有排序功能，而且没有键值对的概念，因此需要zset通过编码实现：
+                    ZipList是连续内存，因此score和element是紧挨在一起的两个entry，element在前，score在后
+                    score越小越接近队首，score越大越接近队尾，按照score值升序排列
+            Hash 
+                Hash结构与Redis中的Zset非常类似：
+                    都是键值存储
+                    都需求根据键获取值
+                    键必须唯一
+                区别如下：
+                    zset的键是member，值是score，hash的键和值都是任意键
+                    zset要根据score排序，hash无需排序
+                因此，Hash底层采用的编码与Zset基本一致，只需要把排序有关的SkipList去掉即可：
+                    Hash结构默认采用ZipList编码，用以节省内存，ZipList中相邻的两个entry分别保存field和value
+                    当数据量较大时，Hash结构会转为HT编码，也就是Dict，触发条件由两个：
+                        ①ZipList中的元素数量超过了hash-max-ziplist-entries(默认512)
+                        ②ZipList中的任意entry大小超过了hash-max-ziplist-value(默认64字节)
+                void hsetCommand(client *c){
+                    // hset user1 name Jack age 21
+                    int i,created=0;
+                    robj *o; // 略..
+                    // 判断hash的key是否存在，不存在则创建一个新的，默认采用ZipList编码
+                    if((o=hashTypeLookupWriteOrCreate(c,c->argv[1]))==NULL)return;
+                    // 判断是否需要把ZipList转为Dict
+                    hashTypeTryConversion(o,c->argv,2,c->argc-1);
+                    // 循环遍历每一对field和value，并执行hset命令
+                    for(i=2;i<c->argc;i+=2)
+                        created+=!hashTypeSet(o,c->argv[i]->ptr,c->argv[i+1]->ptr,HASH_SET_COPY);
+                    // 略...
+                }
+                robj *hashTypeLookupWriteOrCreate(client *c,robj *key){
+                    // 查找key
+                    robj *o=lookupKeyWrite(c->db,key);
+                    if(checkType(c,o,OBJ_HASH))return NULL;
+                    // 不存在，则创建新的
+                    if(o==NULL){
+                        o=createHashObject();
+                        dbAdd(c->db,key,o);
+                    }
+                    return o;
+                }
+                robj *createHashObject(void){
+                    // 默认采用ZipList编码，申请ZipList内存空间
+                    unsigned char *zl=ziplistNew();
+                    robj *o=createObject(OBJ_HASH,zl);
+                    // 设置编码
+                    o->encoding=OBJ_ENCODING_ZIPLIST;
+                    return o;
+                }
+
+                void hashTypeTryConversion(robj *o,robj **argv,int start,int end){
+                    int i;
+                    size_t sum=0;
+                    // 本来就不是ZipList编码，什么都不用做了
+                    if(o->encoding!=OBJ_ENCODING_ZIPLIST)return;
+                    // 依次遍历命令中的field、value参数
+                    for(i=start;i<=end;i++){
+                        if(!sdsEncodeObject(argv[i]))continue;
+                        size_t len=sdslen(argv[i]->ptr);
+                        // 如果field或value超过hash_max_ziplist_value，则转为HT
+                        if(len > server.hash_max_ziplist_value){
+                            hashTypeConvert(o,OBJ_ENCODING_HT);
+                            return;
+                        }
+                        sum+=len;
+                    }// ziplist大小超过1G，也转为HT
+                    if(!ziplistSafeToAdd(o->ptr,sum))
+                        hashTypeConvert(o,OBJ_ENCODING_HT);
+                }
+
+                int hashTypeSet(robj *o,sds field,sds value,int flags){
+                    int update=0;
+                    // 判断是否为ZipList编码
+                    if(o->encoding==OBJ_ENCODING_ZIPLIST){
+                        unsigned char *zl,*fptr,*vptr;
+                        zl=o->ptr;
+                        // 查询head指针
+                        fptr=ziplistIndex(zl,ZIPLIST_HEAD);
+                        if(fptr!=NULL){ // head不为空，说明ZipList不为空，开始查找key
+                            fptr=ziplistFind(zl,fptr,(unsigned char *)field,sdslen(field),1);
+                            if(fptr!=NULL){ // 判断是否存在，如果已经存在则更新
+                                update=1;
+                                zl=ziplistReplace(zl,vptr,(unsigned char *)value,sdslen(value));
+                            }
+                        }
+                        // 不存在，则直接push
+                        if(!update){ // 依次push新的field和value到ZipList的尾部
+                            zl=ziplistPush(zl,(unsigned char *)filed,sdslen(field),ZIPLIST_TAIL);
+                            zl=ziplistPush(zl,(unsigned char *)value,sdslen(value),ZIPLIST_TAIL);
+                        }
+                        o->ptr=zl;
+                        // 插入了新元素，检查list长度是否超出，超出则转为HT
+                        if(hashTypeLength(o) > server.hash_max_ziplist_entries)
+                            hashTypeConvert(o,OBJ_ENCODING_HT);
+                    }else if(o->encoding==OBJ_ENCODING_HT){
+                        // HT编码，直接插入或覆盖
+                    }else{
+                        serverPanic("Unknown hash encoding");
+                    }
+                    return update;
+                }
+
+
+    网络模型    
+        阻塞IO
+            阻塞IO就是两个阶段都必须阻塞等待
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20140119.png)
+        非阻塞IO
+            非阻塞IO的recvfrom操作会立即返回结果而不是阻塞用户进程
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20140413.png)
+        IO多路复用
+            无论是阻塞IO还是非阻塞IO，用户应用在一阶段都需要调用recvfrom来获取资源，差别在于无数据时的处理方案：
+                如果调用recvfrom时，恰好没有数据，阻塞IO会使进程阻塞，非阻塞IO使cpu空转，都不能充分发挥cpu的作用
+                如果调用recvfrom时，恰好有数据，则用户进程可以直接进入第二阶段，读取并处理数据
+            比如服务端处理客户端socket请求时，在单线程情况下，只能依次处理每一个socket，如果正在处理的socket恰好未就绪(数据不可读或不可写)，
+            线程就会被阻塞，所有其它客户端socket都必须等待，性能自然会很差
+            这就像服务员给顾客点餐，分两步：
+                1.顾客思考要吃什么(等待数据就绪)
+                2.顾客想好了，开始点餐(读取数据)
+            提高效率有几种方法？
+                √ 方案一：增加更多服务员(多线程)
+                √ 方案二：不排队，谁想好了吃什么(数据就绪了)，服务员就给谁点餐(用户应用就去读取数据)
+            那用户进程如何知道内核中数据是否就绪？
+            文件描述符：简称FD(file descriptor)，是一个从0开始递增的无符号整数，用来关联Linux中的一个文件。
+            在Linux中，一切皆文件，例如常规文件、视频、硬件设备等，当然也包括网络套接字Socket
+            IO多路复用：是利用多个线程来同时监听多个FD，并在某个FD可读、可写时得到通知，从而避免无效的等待，充分利用cpu资源
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20142114.png)
+            监听FD的方式、通知方式有多种实现，常见的有：
+                select 
+                poll
+                epoll
+            差异：
+                select和poll只会通知用户进程有FD就绪，但不确定具体是哪个FD，需要用户进程逐个遍历FD来确定
+                epoll则会在通知用户进程FD就绪的同时，把已就绪的FD写入用户空间
+        IO多路复用-select
+            select是linux中最早的I/O多路复用实现方案：
+                // 定义类型别名 __fd_mask,本质是long int
+                typedef long int __fd_mask;
+                //fd_set 记录要监听的fd集合，及其对应状态
+                typedef stuct{
+                    // fds_bits 是long类型数组，长度为1024/32=32
+                    // 共1024个bit位，每个bit位代表一个fd，0代表未就绪，1代表就绪
+                    __fd_mask fds_bits[__FD_SETSIZE / __NFDBITS];
+                    // ...
+                }fd_set;
+                // select函数，用于监听多个fd的集合
+                int select(
+                    int nfds, // 要监视的fd_set的最大fd+1
+                    fd_set *readfds, // 要监听读事件的fd集合
+                    fd_set *writefds, // 要监听写事件的fd集合
+                    fd_set *exceptfds, // 要监听异常事件的fd集合
+                    // 超过事件，null——永不超时; 0——不阻塞等待; 大于0——固定等待时间
+                    struct timeval *timeout
+                );
+            select模式存在的问题：
+                需要将整个fd_set从用户空间拷贝到内核空间，select借宿还要再次拷贝回用户空间
+                select无法得知具体是哪个fd就绪，需要遍历整个fd_set
+                fd_set监听的fd数量不能超过1024
+        IO多路复用-poll
+            poll模式对select模式做了简单改进，但性能提升不明显，部分关键代码如下：
+                // pollfd 中的事件类型
+                #define POLLIN      // 可读事件
+                #define POLLOUT     // 可写事件
+                #define POLLERR     // 错误事件
+                #define POLLNVAL    // fd未打开
+                // pollfd结构
+                struct pollfd{
+                    int fd; // 要监听的fd 
+                    short int events; // 要监听的事件类型：读、写、异常
+                    short int revents; // 实际发生的事件类型
+                };
+                // poll 函数
+                int poll(
+                    struct pollfd *fds, // pollfd数组，可以自定义大小
+                    nfds_t nfds, // 数组元素个数
+                    int timeout // 超过时间
+                );
+            IO流程：
+                1.创建pollfd数组，向其中添加关注的fd信息，数组大小自定义
+                2.调用poll函数，将pollfd数组拷贝到内核空间，转链表存储，无上限
+                3.内核遍历fd，判断是否就绪
+                4.数据就绪或超时后，拷贝pollfd数组到用户空间，返回就绪fd数量n
+                5.用户进程判断n是否大于0
+                6.大于0则遍历pollfd数组，找到就绪的fd
+            与select对比：
+                select模式的fd_set大小固定为1024，而pollfd在内核中采用链表，理论上无上限
+                监听fd越多，每次遍历消耗的时间越久，性能反而回下降
+
+        IO多路复用-epoll
+            struct eventpoll{
+                // ...
+                struct rb_root rbr; // 红黑树，记录要监听的FD
+                struct list_head idlist; // 链表，记录就绪的FD
+                // ...
+            };
+
+            // 1.会在内核创建eventpoll结构体，返回对应的句柄epfd
+            int epoll_create(int size);
+
+            // 2.将一个FD添加到epoll的红黑树中，并设置ep_poll_callback
+            // callback触发时，就把对应的FD加入到rdlist这个就绪列表中
+            int epoll_crl(
+                int epfd, // epoll实例的句柄
+                int op, // 要执行的操作，包括：ADD、MOD、DEL
+                int fd, // 要监听的fd 
+                struct epoll_event *event // 要监听的事件类型：读、写、异常等
+            );
+            // 3.检查rdlist列表是否为空，不为空则返回就绪的FD数量
+            int epoll_wait(
+                int epfd, // eventpoll实例的句柄
+                struct epoll_event *events; // 空event数组，用于接收就绪的FD
+                int maxevents, // events数组的最大长度
+                int timeout // 超过时间，-1永不超时，0不阻塞，大于0为阻塞时间
+            );
+
+        IO多路复用-事件通知机制
+            当FD有数据可读时，我们调用epoll_wait就可以得到通知。事件通知的模式有两种：
+                LevelTriggered：简称LT，当FD有数据可读时，会重复通知多次，直至数据处理完成。是epoll的默认模式
+                EdgeTriggered：简称ET，当FD有数据可读时，只会被通知一次，不管数据是否处理完成
+            ET模式避免了LT模式可能出现的惊群现象
+            ET模式最好结合非阻塞IO读取FD数据，相比LT会复杂一些
+
+        IO多路复用-web服务流程
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20153255.png)
+        信号驱动IO
+            信号驱动IO是与内核建立SIGIO的信号关联并设置回调，当内核有FD就绪时，会发出SIGIO信号通知用户，期间用户应用可以执行其他业务，无需阻塞等待
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20154521.png)
+        异步IO
+            异步IO的整个过程都是非阻塞的，用户进程调用完异步API后就可以取做其它事情，内核等待数据就绪并拷贝到用户空间后才会递交信号，通知用户进程
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20154521.png)
+            异步IO模型中，用户进程在两个阶段都是非阻塞状态
+        同步和异步
+            IO操作是同步还是异步，关键看数据在内核空间与用户空间的拷贝过程(数据读写的IO操作)，也就是阶段二是同步还是异步：
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20154521.png)
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20155243.png)
+        Redis网络模型
+            redis到底是单线程还是多线程
+                如果仅仅聊redis的核心业务部分(命令处理)，答案是单线程
+                如果是聊整个redis，那么答案是多线程
+            在redis版本迭代过程中，在两个重要的时间节点上引入了多线程的支持：
+                Redis v4.0：引入多线程异步处理一些耗时较长的任务，例如异步删除命令unlink
+                Redis v6.0：在核心网络模型中引入多线程，进一步提高对于多核CPU的利用率
+            为什么Redis要选择单线程？
+                抛开持久化不谈，Redis是纯内存操作，执行速度非常快，它的性能瓶颈是网络延迟而不是执行速度，因此多线程并不会带来巨大的性能提升
+                多线程会导致过多的上下文切换，带来不必要的开销
+                引入多线程会面临线程安全问题，必然要引入线程锁这样的安全手段，实现复杂度高，而且性能也会大打折扣
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20163027.png)
+    通信协议
+        RESP协议
+            Redis是一个CS架构的软件，通信一般分两步（不包括pipeline和PubSub）：
+                ①客户端(client)向服务器(server)发送一条命令
+                ②服务端解析并执行命令，返回响应结构给客户端
+            因此客户端发送命令的格式，服务端响应的格式必须有一个规范，这个规范就是通信协议
+            在Redis中采用的是RESP(Redis Serialization Protocol)协议：
+                Redis 1.2版本引入了RESP协议
+                Redis 2.0版本中成为与Redis服务端通信的标准，称为RESP2
+                Redis 6.0版本中，从RESP2升级到了RESP3协议，增加了更多数据类型并且支持6.0的新特性--客户端缓存
+            目前，默认使用的依然是RESP2协议
+
+        RESP协议-数据类型
+            在RESP中，通过首字节的字符来区分不同数据类型，常用的数据类型包括5种：
+                单行字符串：首字节是'+'，后面跟上单行字符串，以CRLF("\r\n")结尾。例如返回"OK" : "+OK\r\n"
+                错误(Errors)：首字节是'-'，与单行字符串格式一样，只是字符串是异常信息，例如："-Error message\r\n"
+                数值：首字节是':'，后面跟上数字格式的字符串，以CRLF结尾。例如：":10\r\n"
+                多行字符串：首字节是'$'，表示二进制安全的字符串，最大支持512MB：
+                    如果大小为0，则代表空字符串："$0\r\n\r\n"
+                    如果大小为-1，则代表不存在："$-1\r\n"
+                数组：首字节是'*'，后面跟上数组元素个数，再跟上元素，元素数据类型不限：
+                    *3\r\n  (数组元素个数)       *3\r\n    
+                    $3\r\nset\r\n               :10\r\n
+                    $4\r\nname\r\n              $5\r\nhello\r\n
+                    $6\r\n虎哥\r\n              *2\r\n$nage\r\n:10\r\n
+
+
+    内存策略
+        Redis内存回收
+            Redis之所以性能强，最主要的原因就是基于内存存储，然而单节点的Redis其内存大小不宜过大，会影响持久化或主从同步性能
+            可以通过配置文件设置Redis最大内存：
+                # 格式：
+                # maxmemory <bytes>
+                # 例如：
+                maxmemory lgb
+            当内存使用达到上限时，就无法存储更多数据了
+
+        过期策略-DB结构
+            可以通过expire命令给Redis的key设置TTL(存活时间)
+            Redis本身是一个典型的key-value内存存储数据库，因此所有的key、value都保存Dict结构中。不过在其database结构体中，
+            有两个Dict：一个用来记录key-value；另一个用来记录key-TTL 
+                typedef struct redisDb{
+                    dict *dict; // 存放所有key及value的地方，也被称为keyspace
+                    dict *expires; // 存放每一个key及其对应的TTL存活时间，只包含了TTL的key
+                    dict *blocking_keys; // Keys with clients waiting for data 
+                    dict *ready_keys; // Blocked keys taht received a PUSH 
+                    dict *watched_keys; // WATCHED keys for MULTI/EXEC CAS
+                    int id; // Database ID, 0-15
+                    long long avg_ttl; // 记录平均TTL时长
+                    unsigned long expires_cursor; // expire检查时在dict中抽样的索引位置
+                    list *defrag_later; // 等待碎片整理的key列表
+                }redisDb;
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20171115.png)
+        过期策略-惰性删除
+            惰性删除：并不是在TTL到期后就立刻删除，而是在访问一个key的时候，检查该key的存活时间，如果已经过期才执行删除
+            // 查找一个key执行写操作
+            robj *lookupKeyWriteWithFlags(redisDb *db,robj *key,int flags){
+                // 检查key是否过期
+                expireIfNeeded(db,key);
+                return lookupKey(db,key,flags);
+            }
+            // 查找一个key执行读操作
+            robj *lookupKeyReadWithFlags(redisDb *db,robj *key,int flags){
+                robj *val;
+                // 检查key是否过期
+                if(expireIfNeeded(db,key)==1){
+                    // ...略
+                }
+                return lookupKey(db,key,flags);
+            }
+
+            int expireIfNeeded(redisDb *db,robj *key){
+                // 判断是否过期，如果未过期直接结束并返回0
+                if(!keyIsExpired(db,key))return 0;
+                // ...略
+                // 删除过期key
+                deleteExpireKeyAndPropagate(db,key);
+                return 1;
+            }
+            有个问题：如果有一个过期的key，一直未被访问，则一直未删除，有可能永远不被访问，导致一直未被删除
+
+        过期策略-周期删除
+            周期删除：是通过一个定时任务，周期性的抽样部分过期的key，然后执行删除。执行周期有两种：
+                Redis会设置一个定时任务serverCron()，按照server.hz的频率来执行过期key清理，模式为SLOW
+                Redis的每个事件循环前会调用beforeSleep()函数，执行过期key清理，模式为FAST
+                // server.c
+                void initServer(void){
+                    // ...
+                    // 创建定时器，关联回调函数serverCron，处理周期取决于server.hz，默认10
+                    aeCreateTimeEvent(server.el,1,serverCron,NULL,NULL)
+                }
+
+                // server.c 
+                int serverCron(struct aeEventLoop *eventLoop,long long id,void *clientData){
+                    // 更新lruclock到当前时间，为后期的LRU和LFU做准备
+                    unsigned int lruclock=getLRUClock();
+                    atomicSet(server.lruclock,lruclock);
+                    // 执行database的数据清理，例如过期key处理
+                    databaseCron();
+                    return 1000/server.hz;
+                }
+
+                void databasesCron(void){
+                    // 尝试清理部分过期key，清理模式默认为SLOW
+                    activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
+                }
+
+                void beforeSleep(struct aeEventLoop *eventLoop){
+                    // ...
+                    // 尝试清理部分过期key，清理模式默认为FAST
+                    activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
+                }
+
+                void aeMain(aeEventLoop,*eventLoop){
+                    eventLoop->stop=0;
+                    while(!eventLoop->stop){
+                        // beforeSleep()-->Fast模式清理
+                        // n=aeApiPoll()
+                        // 如果n > 0，FD就绪，处理IO事件
+                        // 如果到了执行时间，则调用serverCron()-->SLOW模式清理
+                    }
+                }
+            SLOW模式规则：
+                1.执行频率受server.hz影响，默认为10，即每秒执行10次，每个执行周期100ms
+                2.执行清理耗时不超过一次执行周期的25%
+                3.逐个遍历db，逐个遍历db中的bucket，抽取20个key判断是否过期
+                4.如果没达到时间上限(25ms)并且过期key比例大于10%，再进行一次抽样，否则结束
+
+             FAST模式规则(过期key比例小于10%不执行)：
+                1.执行频率受beforeSleep()调用频率影响，但两次FAST模式间隔不低于2ms
+                2.执行清理耗时不超过1ms
+                3.逐个遍历db，逐个遍历db中的bucket，抽取20个key判断是否过期
+                4.如果没达到时间上限(10ms)并且过期key比例大于10%，再进行一次抽样，否则结束
+
+        淘汰策略
+            内存淘汰：就是当Redis内存使用达到设置的阈值时，Redis主动挑选部分key删除以释放更多内存的流程
+            int processCommand(client *c){
+                // 如果服务器色湖之了server.maxmemory()属性，并且没有执行lua脚本
+                if(server.maxmemory && !server.lua_timedout){
+                    // 尝试进行内存淘汰performEvictions
+                    int out_of_memory=(performEvictions()==EVICT_FAIL);
+                    // ...
+                    if(out_of_memory && reject_cmd_on_oom){
+                        rejectCommand(c,shared.oomerr);
+                        return C_OK;
+                    }
+                    // ....
+                }
+            }
+
+            Redis支持8种不同策略来选择要删除的key：
+                noeviction：不淘汰任何key，但是内存满时，不允许写入新数据，默认就是这种策略
+                volatile-ttl：对设置了TTL的key，比较key的剩余TTL值，TTL越小越先被淘汰
+                allkeys-random：对全体key，随机进行淘汰，也就是直接从db->dict中随机挑选
+                volatile-random：对设置了TTL的key，随机进行淘汰。也就是从db->expires中随机挑选
+                allekys-lru：对全体key，基于LRU算法进行淘汰
+                volatile-lru：对设置了TTL的key，基于LRU算法进行淘汰
+                allkeys-lfu：对全体key，基于LFU算法进行淘汰
+                volatile-lfu：对设置了TTL的key，基于LFU算法进行淘汰
+            LRU(least Recently Used)：最少最近使用。用当前时间减去最后一次访问时间，这个值越大则淘汰优先级越高
+            LFU(least Frequently Used)：最少频率使用，会统计每个key的访问频率，值越小淘汰优先级越高
+
+            Redis的数据都会被封装未RedisObject结构：
+                typedef stuct redisObject{
+                    unsigned type:4;  // 对象类型
+                    unsigned encoding:4; // 编码方式
+                    unsigned lru:LRU_BITS; // LRU：以秒为单位记录最近一次访问时间，长度24bit
+                                           // LFU：高16位以分钟位单位记录最近一次访问时间，低8位记录逻辑访问次数
+                    int refcount; // 引用计数，计数位0则可以回收
+                    void *ptr; // 数据指针，指向真实数据
+                }robj;
+            LFU的访问次数之所以叫做逻辑访问次数，是因为并不是每次key被访问都技术，而是通过运算：
+                1.生成0~1之间的随机数R
+                2.计算1/(旧次数*lfu_log_factor + 1)，记录为P，luf_log_factor默认为10
+                3.如果R < P，则计数器+1，且最大不超过255
+                4.访问次数会随时间衰减，距离上一次访问时间每隔lfu_decay_time分钟(默认1)，计数器-1
+
+![](file:///C:/Users/CroLaKe/Pictures/Screenshots/%E5%B1%8F%E5%B9%95%E6%88%AA%E5%9B%BE%202026-01-24%20180745.png)
+
+
+
+

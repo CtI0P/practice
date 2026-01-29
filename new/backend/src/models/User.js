@@ -1,7 +1,7 @@
 // 用户数据模型
 const pool=require('../config/database')
 const bcrypt=require('bcryptjs')
-const {ROLES}=reqire('../config/constants')
+const {ROLES}=require('../config/constants')
 
 class User{
     constructor(data){
@@ -108,11 +108,11 @@ class UserModel{
             const existingUserByUsername=await this.findByUsername(username);
             const existingUserByEmail=await this.findByEmail(email);
 
-            if(existingUserByEmail){
+            if(existingUserByUsername){
                 throw new Error('用户已存在');
             }
 
-            if(existingUserByUsername){
+            if(existingUserByEmail){
                 throw new Error('邮箱已被注册');
             }
 
@@ -151,7 +151,7 @@ class UserModel{
 
             if(email!==undefined){
                 fields.push('email=?');
-                values.push('email');
+                values.push(email);
             }
 
             if(fullname!==undefined){
@@ -205,7 +205,7 @@ class UserModel{
         try{
             const hashedPassword=await bcrypt.hash(newPassword,10);
 
-             const [result]=await pool.execute(
+            const [result]=await pool.execute(
                 'UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?',
                 [hashedPassword, id]
             );

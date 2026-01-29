@@ -128,7 +128,11 @@ export default {
 
         console.log('登录响应:', response);
 
+        
+
         if (response.success) {
+
+          console.log('获取到的JWT Token:', response.data.token);
           // 登录成功
           this.showSuccessMessage = true;
           

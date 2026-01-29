@@ -69,14 +69,14 @@ exports.validateRegister=(req,res,next)=>{
     }
 
     if(!password || password.length<8){
-        errors.push('密码至少需要6个字符');
+        errors.push('密码至少需要8个字符');
     }
 
     if(!email || !/\S+@\S+\.\S+/.test(email)){
         errors.push('邮箱格式不正确');
     }
 
-    if(error.length>0){
+    if(errors.length>0){
         return res.status(HTTP_STATUS.BAD_REQUEST).json({
             success:false,
             message:'验证失败',

@@ -25,7 +25,7 @@ app.use('/uploads', express.static('uploads'));
 const startServer = async () => {
   try {
     await testConnection();
-    await initDatabase();
+    // await initDatabase();
     
     app.listen(PORT, () => {
       console.log(`✅ 服务器运行在 http://localhost:${PORT}`);

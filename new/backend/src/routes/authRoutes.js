@@ -6,7 +6,7 @@ const {ROLES}=require('../config/constants')
 
 //公开路由
 router.post(
-    'register',
+    '/register',
     authMiddleware.validateRegister, // 验证数据
     authController.register
 );
